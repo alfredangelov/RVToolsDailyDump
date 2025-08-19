@@ -12,7 +12,7 @@ Test-*.ps1
 test/*
 
 # Logs and debug files
-logs/*
+log/*
 *.log
 *.txt
 debug-*
