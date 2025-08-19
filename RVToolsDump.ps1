@@ -35,6 +35,16 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Import SecretManagement module if available and using SecretManagement auth
+try {
+    if (-not $DryRun) {
+        Import-Module Microsoft.PowerShell.SecretManagement -ErrorAction Stop
+        Write-Verbose "SecretManagement module loaded successfully"
+    }
+} catch {
+    Write-Warning "SecretManagement module not available. Falling back to prompt authentication."
+}
+
 function Resolve-PathOrCombine {
     param(
         [Parameter(Mandatory)] [string] $Path
@@ -88,6 +98,9 @@ $cfg = $cfgResult.Data
 $usingTemplateCfg = $cfgResult.UsingTemplate
 $DryRun = $DryRun -or $usingTemplateCfg
 
+# Set up logging configuration
+$script:ConfigLogLevel = $cfg.Logging?.LogLevel ?? 'INFO'
+
 # Resolve paths
 $rvtoolsPath  = Resolve-PathOrCombine -Path ($cfg.RVToolsPath)
 $exportsRoot  = Resolve-PathOrCombine -Path (($cfg.ExportFolder) ?? 'exports')
@@ -101,10 +114,24 @@ $script:LogFile = Join-Path $logsRoot ("RVTools_RunLog_{0}.txt" -f (Get-Date -Fo
 function Write-Log {
     param(
         [Parameter(Mandatory)] [string] $Message,
-        [ValidateSet('INFO','WARN','ERROR','SUCCESS')] [string] $Level = 'INFO'
+        [ValidateSet('INFO','WARN','ERROR','SUCCESS','DEBUG')] [string] $Level = 'INFO'
     )
-    $line = "{0} [{1}] {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
-    $line | Tee-Object -FilePath $script:LogFile -Append | Out-Host
+    
+    # Check if we should log this level
+    $configLogLevel = $script:ConfigLogLevel ?? 'INFO'
+    $logLevels = @('DEBUG', 'INFO', 'WARN', 'ERROR', 'SUCCESS')
+    $currentIndex = $logLevels.IndexOf($configLogLevel)
+    $messageIndex = $logLevels.IndexOf($Level)
+    
+    if ($messageIndex -ge $currentIndex -or $Level -eq 'SUCCESS') {
+        $line = "{0} [{1}] {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
+        
+        if ($script:LogFile) {
+            $line | Tee-Object -FilePath $script:LogFile -Append | Out-Host
+        } else {
+            Write-Host $line
+        }
+    }
 }
 
 if (-not $DryRun) {
@@ -117,9 +144,9 @@ if (-not $DryRun) {
 
 # Load host list
 $hostsResult = Import-DataFileOrTemplate -LivePath $HostListPath -TemplateName 'HostList-Template.psd1' -Purpose 'host list' -PreferTemplate:$DryRun
-$hostItems = $hostsResult.Data
+$hostItems = $hostsResult.Data.Hosts
 
-if (-not $hostItems) { throw "Host list is empty in '$hostListFile'" }
+if (-not $hostItems) { throw "Host list is empty in '$($hostsResult.Path)'" }
 
 # Normalize host entries into [pscustomobject] with Name + optional Username
 $servers = @(
@@ -138,14 +165,67 @@ if (-not $servers) { throw "No valid servers found in host list." }
 # Auth settings
 $authMethod = ($cfg.Auth?.Method ?? 'Prompt')
 $defaultUsername = $cfg.Auth?.Username
+$vaultName = $cfg.Auth?.DefaultVault ?? 'RVToolsVault'
+$secretPattern = $cfg.Auth?.SecretNamePattern ?? '{HostName}-{Username}'
+$usePasswordEncryption = $cfg.Auth?.UsePasswordEncryption ?? $true
+
+function Get-RVToolsEncryptedPassword {
+    param(
+        [Parameter(Mandatory)] [System.Management.Automation.PSCredential] $Credential
+    )
+    
+    # Convert password to secure string and then to encrypted string using DPAPI
+    $securePassword = $Credential.Password
+    $encryptedPassword = $securePassword | ConvertFrom-SecureString
+    
+    # Add RVTools prefix so it knows this is an encrypted password
+    return '_RVToolsV3PWD' + $encryptedPassword
+}
+
+function Get-SecretName {
+    param(
+        [Parameter(Mandatory)] [string] $HostName,
+        [Parameter(Mandatory)] [string] $Username,
+        [Parameter(Mandatory)] [string] $Pattern
+    )
+    return $Pattern -replace '\{HostName\}', $HostName -replace '\{Username\}', $Username
+}
 
 # Cache credentials by username
 $credCache = @{}
 function Get-CredForUser {
-    param([Parameter(Mandatory)] [string] $Username)
-    if ($credCache.ContainsKey($Username)) { return $credCache[$Username] }
-    $cred = Get-Credential -UserName $Username -Message "Enter password for $Username"
-    $credCache[$Username] = $cred
+    param(
+        [Parameter(Mandatory)] [string] $Username,
+        [Parameter(Mandatory)] [string] $HostName
+    )
+    
+    $cacheKey = "$HostName-$Username"
+    if ($credCache.ContainsKey($cacheKey)) { 
+        Write-Log -Level 'DEBUG' -Message "Using cached credential for $Username on $HostName"
+        return $credCache[$cacheKey] 
+    }
+    
+    $cred = $null
+    
+    # Try SecretManagement first if configured
+    if ($authMethod -eq 'SecretManagement' -and -not $DryRun) {
+        try {
+            $secretName = Get-SecretName -HostName $HostName -Username $Username -Pattern $secretPattern
+            Write-Log -Level 'DEBUG' -Message "Looking for secret: $secretName in vault: $vaultName"
+            $cred = Get-Secret -Name $secretName -Vault $vaultName -ErrorAction Stop
+            Write-Log -Level 'DEBUG' -Message "Retrieved credential for $Username on $HostName from SecretManagement"
+        } catch {
+            Write-Log -Level 'WARN' -Message "Failed to retrieve credential for $Username on $HostName from SecretManagement: $($_.Exception.Message)"
+            Write-Log -Level 'INFO' -Message "Falling back to prompt authentication"
+        }
+    }
+    
+    # Fall back to prompt if SecretManagement failed or not configured
+    if (-not $cred) {
+        $cred = Get-Credential -UserName $Username -Message "Enter password for $Username on $HostName"
+    }
+    
+    $credCache[$cacheKey] = $cred
     return $cred
 }
 
@@ -171,34 +251,57 @@ foreach ($server in $servers) {
     }
 
     $cred = $null
-    $plainPwd = $null
+    $passwordArg = $null
     if (-not $DryRun) {
-        $cred = Get-CredForUser -Username $user
-        $plainPwd = $cred.GetNetworkCredential().Password
+        $cred = Get-CredForUser -Username $user -HostName $name
+        if ($usePasswordEncryption) {
+            $passwordArg = Get-RVToolsEncryptedPassword -Credential $cred
+            Write-Log -Level 'DEBUG' -Message "Using encrypted password for $user on $name"
+        } else {
+            $passwordArg = $cred.GetNetworkCredential().Password
+            Write-Log -Level 'DEBUG' -Message "Using plaintext password for $user on $name"
+        }
     }
 
     $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-    $exportFile = Join-Path $exportsRoot ("{0}-{1}.xlsx" -f $name, $timestamp)
+    $exportFileName = "{0}-{1}.xlsx" -f $name, $timestamp
+    $exportFile = Join-Path $exportsRoot $exportFileName
 
     $args = if (-not $DryRun) {
-        @('-c', '-s', $name, '-u', $cred.UserName, '-p', $plainPwd, '-f', $exportFile) + $extraArgs
+        @('-c', 'ExportAll2xlsx', '-s', $name, '-u', $cred.UserName, '-p', $passwordArg, '-d', "`"$exportsRoot`"", '-f', $exportFileName) + $extraArgs
     } else {
         $simUser = if ($user) { $user } else { '<username>' }
-        @('-c', '-s', $name, '-u', $simUser, '-p', '<redacted>', '-f', $exportFile) + $extraArgs
+        $pwdDisplay = if ($usePasswordEncryption) { '<encrypted>' } else { '<redacted>' }
+        @('-c', 'ExportAll2xlsx', '-s', $name, '-u', $simUser, '-p', $pwdDisplay, '-d', "`"$exportsRoot`"", '-f', $exportFileName) + $extraArgs
     }
 
     try {
         if ($PSCmdlet.ShouldProcess($name, 'Run RVTools export')) {
             if (-not $DryRun) {
                 Write-Log -Message "Starting RVTools export for $name to $exportFile"
-                & $rvtoolsPath @args
-                $code = $LASTEXITCODE
-                if ($code -eq 0) {
-                    Write-Log -Level 'SUCCESS' -Message "Completed export for $name"
-                    $overallStatus += "SUCCESS - $name"
-                } else {
-                    Write-Log -Level 'ERROR' -Message "RVTools exit code $code for $name"
-                    $overallStatus += "FAILURE ($code) - $name"
+                
+                # Change to RVTools directory (as recommended by Dell)
+                $originalLocation = Get-Location
+                Set-Location (Split-Path $rvtoolsPath -Parent)
+                
+                try {
+                    # Use Start-Process as recommended by Dell's official script
+                    $process = Start-Process -FilePath $rvtoolsPath -ArgumentList $args -NoNewWindow -Wait -PassThru
+                    $code = $process.ExitCode
+                    
+                    if ($code -eq 0) {
+                        Write-Log -Level 'SUCCESS' -Message "Completed export for $name"
+                        $overallStatus += "SUCCESS - $name"
+                    } elseif ($code -eq -1) {
+                        Write-Log -Level 'ERROR' -Message "RVTools connection failed for $name (exit code -1)"
+                        $overallStatus += "CONNECTION FAILED - $name"
+                    } else {
+                        Write-Log -Level 'ERROR' -Message "RVTools exit code $code for $name"
+                        $overallStatus += "FAILURE ($code) - $name"
+                    }
+                } finally {
+                    # Restore original location
+                    Set-Location $originalLocation
                 }
             } else {
                 Write-Log -Message "[Dry-Run] Would run: $rvtoolsPath $($args -join ' ')"
