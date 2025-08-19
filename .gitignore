@@ -7,10 +7,6 @@ shared/HostList.psd1
 # Project internal documentation
 docs/*
 
-# Test files and temporary directories
-Test-*.ps1
-test/*
-
 # Logs and debug files
 log/*
 *.log
