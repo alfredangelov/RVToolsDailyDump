@@ -6,6 +6,9 @@
     This script uploads Excel files from the exports folder to a SharePoint
     document library for easy access via Teams and web interface.
 
+.VERSION
+    1.4.2
+
 .PARAMETER ConfigPath
     Path to the configuration file. Defaults to shared/Configuration.psd1.
 

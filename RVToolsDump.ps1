@@ -24,11 +24,12 @@
     Each tab is exported individually, reducing memory usage.
 
 .NOTES
-    Version: 1.3.0
+    Version: 1.4.2
     - Keep live config files out of source control. Templates are provided under `shared/`.
     - Credentials are requested securely at runtime. Password is passed to RVTools as plain text
       command-line argument (required by RVTools). Use a low-privilege service account.
     - PowerShell 7+ compatible.
+    - New in v1.4.2: Unique log files per run (YYYYMMDD_HHMMSS format) for cleaner email reports.
     - New in v1.3.0: Chunked export mode for large environments with memory issues.
 #>
 
@@ -118,7 +119,7 @@ $logsRoot     = Resolve-PathOrCombine -Path (($cfg.LogsFolder) ?? 'logs')
 Ensure-Directory -Path $exportsRoot
 Ensure-Directory -Path $logsRoot
 
-$script:LogFile = Join-Path $logsRoot ("RVTools_RunLog_{0}.txt" -f (Get-Date -Format 'yyyyMMdd'))
+$script:LogFile = Join-Path $logsRoot ("RVTools_RunLog_{0}.txt" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
 
 function Write-Log {
     param(
@@ -342,6 +343,84 @@ function Merge-ExcelFiles {
     }
 }
 
+function Send-MicrosoftGraphEmail {
+    param(
+        [Parameter(Mandatory)] [string] $TenantId,
+        [Parameter(Mandatory)] [string] $ClientId,
+        [Parameter()] [string] $ClientSecret,
+        [Parameter()] [string] $ClientSecretName,
+        [Parameter()] [string] $VaultName = 'RVToolsVault',
+        [Parameter(Mandatory)] [string] $From,
+        [Parameter(Mandatory)] [string[]] $To,
+        [Parameter(Mandatory)] [string] $Subject,
+        [Parameter(Mandatory)] [string] $Body
+    )
+    
+    try {
+        # Resolve ClientSecret from vault if ClientSecretName is provided
+        if ($ClientSecretName -and -not $ClientSecret) {
+            try {
+                $ClientSecret = Get-Secret -Name $ClientSecretName -Vault $VaultName -AsPlainText -ErrorAction Stop
+                Write-Log -Level 'DEBUG' -Message "Retrieved ClientSecret from vault: $ClientSecretName"
+            } catch {
+                Write-Log -Level 'ERROR' -Message "Failed to retrieve ClientSecret from vault '$VaultName' with name '$ClientSecretName': $($_.Exception.Message)"
+                return $false
+            }
+        }
+        
+        # Validate that we have a ClientSecret
+        if ([string]::IsNullOrWhiteSpace($ClientSecret)) {
+            Write-Log -Level 'ERROR' -Message "ClientSecret is required but not provided or retrieved from vault"
+            return $false
+        }
+        
+        # Import required modules
+        Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
+        Import-Module Microsoft.Graph.Mail -ErrorAction Stop
+        
+        # Create client secret credential
+        $SecureSecret = ConvertTo-SecureString $ClientSecret -AsPlainText -Force
+        $ClientSecretCredential = New-Object System.Management.Automation.PSCredential($ClientId, $SecureSecret)
+        
+        # Connect to Microsoft Graph
+        Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $ClientSecretCredential -NoWelcome
+        
+        # Create the email message
+        $BodyObject = @{
+            ContentType = "Text"
+            Content = $Body
+        }
+        
+        $ToRecipients = @()
+        foreach ($recipient in $To) {
+            $ToRecipients += @{
+                EmailAddress = @{
+                    Address = $recipient
+                }
+            }
+        }
+        
+        $Message = @{
+            Subject = $Subject
+            Body = $BodyObject
+            ToRecipients = $ToRecipients
+        }
+        
+        # Send the email
+        Send-MgUserMail -UserId $From -Message $Message
+        
+        # Disconnect from Microsoft Graph
+        Disconnect-MgGraph | Out-Null
+        
+        return $true
+        
+    } catch {
+        Write-Log -Level 'ERROR' -Message "Microsoft Graph email error: $($_.Exception.Message)"
+        try { Disconnect-MgGraph | Out-Null } catch { }
+        return $false
+    }
+}
+
 $overallStatus = @()
 
 foreach ($server in $servers) {
@@ -556,27 +635,67 @@ foreach ($server in $servers) {
 # Email summary
 $emailCfg = $cfg.Email
 if ($emailCfg.Enabled -and -not $NoEmail -and -not $DryRun) {
-    $canEmail = $null -ne (Get-Command -Name Send-MailMessage -ErrorAction SilentlyContinue)
-    if (-not $canEmail) {
-        Write-Log -Level 'WARN' -Message "Send-MailMessage not available. Skipping email."
-    } else {
-        try {
-            $body = Get-Content -LiteralPath $script:LogFile -Raw
-            $params = @{
-                From       = $emailCfg.From
-                To         = $emailCfg.To -join ','
-                Subject    = "RVTools Daily Report - $(Get-Date -Format 'yyyy-MM-dd')"
-                Body       = $body
-                SmtpServer = $emailCfg.SmtpServer
+    $body = Get-Content -LiteralPath $script:LogFile -Raw
+    $subject = "RVTools Daily Report - $(Get-Date -Format 'yyyy-MM-dd')"
+    
+    # Determine email method
+    $method = if ($emailCfg.Method) { $emailCfg.Method } else { 'SMTP' }  # Default to SMTP for backward compatibility
+    
+    try {
+        if ($method -eq 'MicrosoftGraph') {
+            # Microsoft Graph email method
+            if (-not $emailCfg.TenantId -or -not $emailCfg.ClientId) {
+                Write-Log -Level 'ERROR' -Message "Microsoft Graph email requires TenantId and ClientId in configuration."
+            } elseif ([string]::IsNullOrWhiteSpace($emailCfg['ClientSecret']) -and [string]::IsNullOrWhiteSpace($emailCfg['ClientSecretName'])) {
+                Write-Log -Level 'ERROR' -Message "Microsoft Graph email requires either ClientSecret or ClientSecretName in configuration."
+            } else {
+                # Prepare parameters for Microsoft Graph email
+                $graphParams = @{
+                    TenantId = $emailCfg.TenantId
+                    ClientId = $emailCfg.ClientId
+                    From = $emailCfg.From
+                    To = $emailCfg.To
+                    Subject = $subject
+                    Body = $body
+                }
+                
+                # Add ClientSecret or ClientSecretName
+                if (-not [string]::IsNullOrWhiteSpace($emailCfg['ClientSecret'])) {
+                    $graphParams.ClientSecret = $emailCfg['ClientSecret']
+                } elseif (-not [string]::IsNullOrWhiteSpace($emailCfg['ClientSecretName'])) {
+                    $graphParams.ClientSecretName = $emailCfg['ClientSecretName']
+                    $graphParams.VaultName = $cfg.Auth.DefaultVault ?? 'RVToolsVault'
+                }
+                
+                $success = Send-MicrosoftGraphEmail @graphParams
+                if ($success) {
+                    Write-Log -Level 'SUCCESS' -Message "Summary email sent via Microsoft Graph to $($emailCfg.To -join ', ')"
+                } else {
+                    Write-Log -Level 'ERROR' -Message "Failed to send email via Microsoft Graph (see previous error)"
+                }
             }
-            if ($emailCfg.Port) { $params.Port = [int]$emailCfg.Port }
-            if ($emailCfg.UseSsl) { $params.UseSsl = $true }
-            Send-MailMessage @params
-            Write-Log -Level 'SUCCESS' -Message "Summary email sent to $($emailCfg.To -join ', ')"
-        } catch {
-            $err = $_
-            Write-Log -Level 'ERROR' -Message "Failed to send email: $($err.Exception.Message)"
+        } else {
+            # Traditional SMTP method
+            $canEmail = $null -ne (Get-Command -Name Send-MailMessage -ErrorAction SilentlyContinue)
+            if (-not $canEmail) {
+                Write-Log -Level 'WARN' -Message "Send-MailMessage not available. Skipping email."
+            } else {
+                $params = @{
+                    From       = $emailCfg.From
+                    To         = $emailCfg.To -join ','
+                    Subject    = $subject
+                    Body       = $body
+                    SmtpServer = $emailCfg.SmtpServer
+                }
+                if ($emailCfg.Port) { $params.Port = [int]$emailCfg.Port }
+                if ($emailCfg.UseSsl) { $params.UseSsl = $true }
+                Send-MailMessage @params
+                Write-Log -Level 'SUCCESS' -Message "Summary email sent via SMTP to $($emailCfg.To -join ', ')"
+            }
         }
+    } catch {
+        $err = $_
+        Write-Log -Level 'ERROR' -Message "Failed to send email: $($err.Exception.Message)"
     }
 } else {
     Write-Log -Message "Email disabled or suppressed."

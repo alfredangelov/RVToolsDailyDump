@@ -1,6 +1,172 @@
 # RVTools Daily Dump Toolkit - Changelog
 
-## [1.3.0] - August 29, 2025 - Chunked Export & Enhanced Credential Management
+## [1.4.2] - August 29, 2025 - Unique Log Files Per Run
+
+### 🔧 Logging Enhancement
+
+#### Unique Log Files for Each Execution
+
+- **Improved Feature**: Log files now include timestamp (YYYYMMDD_HHMMSS) for unique naming per run
+- **Email Enhancement**: Email reports now contain only logs from the current run, not entire day
+- **Format Change**: From `RVTools_RunLog_YYYYMMDD.txt` to `RVTools_RunLog_YYYYMMDD_HHMMSS.txt`
+- **Benefits**:
+  - Each run generates its own isolated log file
+  - Email reports are cleaner and more focused
+  - Better troubleshooting with run-specific logs
+  - No more cumulative daily logs in email reports
+
+### 🛠️ Technical Improvements
+
+- **Modified**: Log file naming in `RVToolsDump.ps1` to include hours, minutes, and seconds
+- **Enhanced**: Email reports now contain only relevant logs for the specific execution
+- **Maintained**: All existing functionality while improving log organization
+
+## [1.4.1] - August 29, 2025 - Secure Microsoft Graph Secret Storage
+
+### 🔒 Security Enhancement
+
+#### Secure ClientSecret Storage in SecretManagement Vault
+
+- **New Feature**: `Set-MicrosoftGraphCredentials.ps1` helper script for secure secret management
+- **Security Improvement**: Microsoft Graph ClientSecret now stored encrypted in SecretManagement vault
+- **Configuration Change**: Use `ClientSecretName` instead of plaintext `ClientSecret` in configuration
+- **Benefits**:
+  - No plaintext secrets in configuration files
+  - Encrypted storage using Windows DPAPI
+  - Centralized secret management with existing credential infrastructure
+  - Easy secret rotation and maintenance
+
+#### Enhanced Microsoft Graph Integration
+
+- **Improved**: Parameter validation for ClientSecret vs ClientSecretName usage
+- **Fixed**: Hashtable property access issue that caused parameter binding errors
+- **Added**: Comprehensive secret management operations (Store/Update/Remove/Show/List)
+- **Enhanced**: Configuration validation to ensure proper secret storage setup
+
+### 🛠️ Technical Improvements 1.4.2
+
+#### New Helper Script: Set-MicrosoftGraphCredentials.ps1
+
+```powershell
+# Store ClientSecret securely in vault
+.\Set-MicrosoftGraphCredentials.ps1 -Store -ClientSecret 'your-secret'
+
+# Update existing ClientSecret
+.\Set-MicrosoftGraphCredentials.ps1 -Update -ClientSecret 'new-secret'
+
+# Show configuration (without revealing secret)
+.\Set-MicrosoftGraphCredentials.ps1 -Show
+
+# List all vault secrets
+.\Set-MicrosoftGraphCredentials.ps1 -List
+
+# Remove ClientSecret from vault
+.\Set-MicrosoftGraphCredentials.ps1 -Remove
+```
+
+#### Configuration Migration
+
+**Before (Insecure)**:
+
+```powershell
+Email = @{
+    Method    = 'MicrosoftGraph'
+    TenantId  = 'tenant-id'
+    ClientId  = 'client-id'
+    ClientSecret = 'plaintext-secret-here'  # Security risk!
+}
+```
+
+**After (Secure)**:
+
+```powershell
+Email = @{
+    Method    = 'MicrosoftGraph'
+    TenantId  = 'tenant-id'
+    ClientId  = 'client-id'
+    ClientSecretName = 'MicrosoftGraph-ClientSecret'  # References vault secret
+}
+```
+
+#### Function Improvements
+
+- **Enhanced**: `Send-MicrosoftGraphEmail` function parameter handling
+- **Fixed**: Property access syntax to use hashtable notation (`$config['key']`) instead of object notation (`$config.key`)
+- **Improved**: Error handling for missing or invalid ClientSecret configuration
+- **Added**: Automatic secret retrieval from vault during email sending
+
+### 🔧 Bug Fixes
+
+#### Microsoft Graph Email Parameter Binding
+
+- **Fixed**: "The property 'ClientSecret' cannot be found on this object" error
+- **Root Cause**: PowerShell property access on hashtables where property doesn't exist
+- **Solution**: Changed from `$emailCfg.ClientSecret` to `$emailCfg['ClientSecret']`
+- **Result**: Proper handling of optional ClientSecret vs ClientSecretName parameters
+
+### ✅ Validation & Testing
+
+**Security Testing**:
+
+- ✅ ClientSecret successfully stored in encrypted vault
+- ✅ Configuration files contain no plaintext secrets
+- ✅ Email sending works with vault-retrieved secrets
+- ✅ Secret rotation process validated
+
+**Integration Testing**:
+
+- ✅ Microsoft Graph email sending confirmed working
+- ✅ RVTools exports continue functioning normally
+- ✅ End-to-end workflow tested successfully
+
+### 📚 Documentation Updates (1.4.1)
+
+- **Updated**: README.md with secure Microsoft Graph setup instructions
+- **Added**: Security considerations section highlighting secret storage improvements
+- **Enhanced**: Credential management section with Microsoft Graph specific commands
+- **Added**: File structure documentation showing new helper script
+
+### 🔄 Migration Guide
+
+#### For Existing Microsoft Graph Users
+
+1. **Store your ClientSecret securely**:
+
+   ```powershell
+   .\Set-MicrosoftGraphCredentials.ps1 -Store -ClientSecret 'your-current-secret'
+   ```
+
+2. **Update your Configuration.psd1**:
+
+   ```powershell
+   # Replace this line:
+   ClientSecret = 'your-secret'
+   
+   # With this line:
+   ClientSecretName = 'MicrosoftGraph-ClientSecret'
+   ```
+
+3. **Verify the setup**:
+
+   ```powershell
+   .\Set-MicrosoftGraphCredentials.ps1 -Show
+   ```
+
+4. **Test email functionality**:
+
+   ```powershell
+   .\RVToolsDump.ps1 -DryRun  # Test configuration
+   ```
+
+### 🎯 Benefits Summary
+
+- **Enhanced Security**: No plaintext secrets in configuration files
+- **Consistent Management**: Same vault used for all credentials (vCenter + Microsoft Graph)
+- **Easy Maintenance**: Simple secret rotation with dedicated helper script
+- **Audit Trail**: SecretManagement provides better tracking of secret access
+- **Future-Proof**: Foundation for additional secret types (SharePoint, etc.)
+
+## [1.4.0] - August 29, 2025 - Microsoft Graph Email & Chunked Export Features
 
 ### 🚀 Major New Features
 
@@ -32,7 +198,19 @@
 - **Improved**: Secret name parsing for hosts/usernames containing dashes
 - **Enhanced**: Better error handling and validation
 
-### 🛠️ Technical Improvements
+#### Microsoft Graph Email Integration
+
+- **New Feature**: Microsoft Graph email method for modern email sending
+- **Purpose**: Replace deprecated Send-MailMessage with secure OAuth2 authentication
+- **Configuration**: New `Method = 'MicrosoftGraph'` option in email configuration
+- **Benefits**:
+  - OAuth2 authentication (more secure than SMTP)
+  - Firewall-friendly (HTTPS only, no SMTP ports needed)
+  - Integrated with Microsoft 365 environments
+  - Better audit logging and security controls
+- Free with existing M365 licensing
+
+### 🛠️ Technical Improvements (1.4.0)
 
 #### Chunked Export Details
 
@@ -61,6 +239,21 @@
 - Detailed exit code explanations (connection failed, crash, other)
 - Summary showing successful vs failed tab counts
 - Clear indication of partial success scenarios
+
+#### Enhanced Dependency Initialization
+
+**Microsoft Graph Module Detection**:
+
+- Automatically detects when Microsoft Graph email is configured
+- Installs `Microsoft.Graph.Authentication` and `Microsoft.Graph.Mail` modules when needed
+- Validates module availability during initialization
+- Conditional installation based on email method configuration
+
+**Improved Validation**:
+
+- Enhanced initialization summary with Microsoft Graph module status
+- Clear warnings when required modules are missing
+- Supports both SMTP and Microsoft Graph email configurations
 
 #### Credential Management Improvements
 
@@ -122,6 +315,37 @@
 
 # List credentials (now shows correct parsing of complex hostnames)
 .\Set-RVToolsCredentials.ps1 -ListCredentials
+```
+
+#### Microsoft Graph Email Configuration
+
+```powershell
+# Configure Microsoft Graph email in Configuration.psd1 (Secure version)
+Email = @{
+    Enabled   = $true
+    Method    = 'MicrosoftGraph'  # Options: 'SMTP', 'MicrosoftGraph'
+    From      = 'rvtools@contoso.com'
+    To        = @('reports@contoso.com')
+    
+    # Microsoft Graph Configuration (Secure)
+    TenantId         = 'your-tenant-id-guid'
+    ClientId         = 'your-client-id-guid'
+    ClientSecretName = 'MicrosoftGraph-ClientSecret'  # Stored securely in vault
+}
+
+# Store the ClientSecret separately using the helper script:
+# .\Set-MicrosoftGraphCredentials.ps1 -Store -ClientSecret 'your-actual-client-secret'
+
+# Traditional SMTP configuration still supported
+Email = @{
+    Enabled   = $true
+    Method    = 'SMTP'  # Default method for backward compatibility
+    From      = 'rvtools@contoso.com'
+    To        = @('reports@contoso.com')
+    SmtpServer= 'smtp.contoso.com'
+    Port      = 587
+    UseSsl    = $true
+}
 ```
 
 ### 🔧 Bug Fixes & Improvements

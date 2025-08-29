@@ -1,6 +1,6 @@
 # RVTools Daily Dump Toolkit
 
-A reliable, configuration-driven PowerShell toolkit for automating RVTools exports across multiple vCenter servers with secure credential management and optional SharePoint integration. **Now with validated Dell RVTools CLI integration and chunked export mode for large environments.**
+A reliable, configuration-driven PowerShell toolkit for automating RVTools exports across multiple vCenter servers with secure credential management and optional SharePoint integration. **Now with validated Dell RVTools CLI integration, chunked export mode for large environments, and Microsoft Graph email support.**
 
 ## Features
 
@@ -10,7 +10,7 @@ A reliable, configuration-driven PowerShell toolkit for automating RVTools expor
 - **Configuration-Driven**: Separate configuration and host list files (templates provided)
 - **Reliable Operation**: DryRun capability, verbose logging, and error handling
 - **Validated RVTools Integration**: Uses Dell's recommended CLI approach with proper batch processing
-- **Email Summaries**: Optional email reports with run status and logs
+- **Email Summaries**: Optional email reports with run status and logs (SMTP or Microsoft Graph)
 - **SharePoint Integration**: Upload exports to SharePoint for Teams access (optional)
 - **Easy Onboarding**: Automated dependency validation and vault initialization
 - **Multi-vCenter Support**: Process multiple vCenter servers with individual or shared credentials
@@ -28,6 +28,8 @@ Run the initialization script to install required modules and set up SecretManag
 This will:
 
 - Install Microsoft.PowerShell.SecretManagement and SecretStore modules
+- Install Microsoft Graph modules (if Microsoft Graph email is configured)
+- Install PnP.PowerShell module (if SharePoint integration is enabled)
 - Create and configure the RVToolsVault for unattended operation
 - Validate RVTools installation
 - Create required directories
@@ -93,6 +95,21 @@ Use the credential management script to securely store credentials for all hosts
 
 # List stored credentials
 .\Set-RVToolsCredentials.ps1 -ListCredentials
+```
+
+#### Microsoft Graph Email Setup
+
+If using Microsoft Graph email, store the ClientSecret securely:
+
+```powershell
+# Store Microsoft Graph ClientSecret in the vault (recommended)
+.\Set-MicrosoftGraphCredentials.ps1 -Store -ClientSecret 'your-actual-client-secret'
+
+# List Microsoft Graph credentials (without showing the secret)
+.\Set-MicrosoftGraphCredentials.ps1 -Show
+
+# Update an existing ClientSecret
+.\Set-MicrosoftGraphCredentials.ps1 -Update -ClientSecret 'new-client-secret'
 ```
 
 ### 4. Test the Setup
@@ -182,6 +199,64 @@ You can configure export mode on a per-host basis in your `HostList.psd1` file, 
 - **Mixed Environments**: Handle both small and large vCenters in the same run
 - **Maintenance-Free**: No need to remember which hosts need special handling
 
+## 📧 Email Configuration
+
+The toolkit supports two email methods for sending daily reports:
+
+### Microsoft Graph Email (Recommended)
+
+Modern email method using OAuth2 authentication with Microsoft 365:
+
+```powershell
+Email = @{
+    Enabled   = $true
+    Method    = 'MicrosoftGraph'
+    From      = 'rvtools@contoso.com'
+    To        = @('reports@contoso.com', 'team@contoso.com')
+    
+    # Azure AD App Registration details
+    TenantId         = 'your-tenant-id-guid'
+    ClientId         = 'your-client-id-guid'
+    ClientSecretName = 'MicrosoftGraph-ClientSecret'  # Stored securely in vault
+}
+```
+
+**Setup Requirements:**
+
+1. **Azure AD App Registration**: Create an app registration with Mail.Send permissions
+2. **Store ClientSecret securely**:
+
+   ```powershell
+   # Use the helper script to store the ClientSecret in the vault
+   .\Set-MicrosoftGraphCredentials.ps1 -Store -ClientSecret 'your-actual-client-secret'
+   ```
+
+3. **Configuration**: Use `ClientSecretName` instead of plaintext `ClientSecret`
+
+**Benefits:**
+
+- OAuth2 authentication (more secure than SMTP credentials)
+- **Secure credential storage** (no plaintext secrets in configuration files)
+- Firewall-friendly (HTTPS only, no SMTP ports needed)
+- Integrated with Microsoft 365 audit logging
+- Free with existing M365 licensing
+
+### Traditional SMTP Email
+
+Classic SMTP method for non-Microsoft environments:
+
+```powershell
+Email = @{
+    Enabled   = $true
+    Method    = 'SMTP'  # Default for backward compatibility
+    From      = 'rvtools@contoso.com'
+    To        = @('reports@contoso.com')
+    SmtpServer= 'smtp.contoso.com'
+    Port      = 587
+    UseSsl    = $true
+}
+```
+
 ## ✅ Validated RVTools Integration
 
 This toolkit uses Dell's recommended RVTools CLI approach, based on their official `RVToolsBatchMultipleVCs.ps1` script:
@@ -204,19 +279,20 @@ The script generates individual Excel files for each vCenter server:
 
 ```Plain text
 RVToolsDailyDump/
-├── RVToolsDump.ps1                     # Main export script
-├── Set-RVToolsCredentials.ps1          # Credential management
-├── Initialize-RVToolsDependencies.ps1  # Setup and validation
-├── Upload-ToSharePoint.ps1             # SharePoint integration
+├── RVToolsDump.ps1                       # Main export script
+├── Set-RVToolsCredentials.ps1            # vCenter credential management
+├── Set-MicrosoftGraphCredentials.ps1     # Microsoft Graph secret management
+├── Initialize-RVToolsDependencies.ps1    # Setup and validation
+├── Upload-ToSharePoint.ps1               # SharePoint integration
 ├── shared/
-│   ├── Configuration-Template.psd1     # Config template
-│   ├── HostList-Template.psd1          # Host list template
-│   ├── Configuration.psd1              # Live config (ignored by Git)
-│   └── HostList.psd1                   # Live host list (ignored by Git)
-├── exports/                            # Export files (ignored by Git)
-├── logs/                               # Log files (ignored by Git)
+│   ├── Configuration-Template.psd1       # Config template
+│   ├── HostList-Template.psd1            # Host list template
+│   ├── Configuration.psd1                # Live config (ignored by Git)
+│   └── HostList.psd1                     # Live host list (ignored by Git)
+├── exports/                              # Export files (ignored by Git)
+├── logs/                                 # Log files (ignored by Git)
 └── docs/
-    └── WishList.md                     # Feature roadmap
+    └── WishList.md                       # Feature roadmap
 ```
 
 ## Configuration Options
@@ -244,6 +320,8 @@ RVToolsDailyDump/
 
 ### Credential Management
 
+#### vCenter Credentials
+
 ```powershell
 # Update a specific credential (e.g., after password rotation)
 .\Set-RVToolsCredentials.ps1 -HostName "vcenter01.contoso.local" -Username "svc_rvtools"
@@ -253,6 +331,25 @@ RVToolsDailyDump/
 
 # List all stored credentials (improved parsing for complex hostnames)
 .\Set-RVToolsCredentials.ps1 -ListCredentials
+```
+
+#### Microsoft Graph Credentials
+
+```powershell
+# Store Microsoft Graph ClientSecret securely in vault
+.\Set-MicrosoftGraphCredentials.ps1 -Store -ClientSecret 'your-actual-client-secret'
+
+# Update an existing ClientSecret (e.g., after secret rotation)
+.\Set-MicrosoftGraphCredentials.ps1 -Update -ClientSecret 'new-client-secret'
+
+# Show current Microsoft Graph configuration (without revealing secret)
+.\Set-MicrosoftGraphCredentials.ps1 -Show
+
+# List all secrets in the vault
+.\Set-MicrosoftGraphCredentials.ps1 -List
+
+# Remove Microsoft Graph ClientSecret from vault
+.\Set-MicrosoftGraphCredentials.ps1 -Remove
 ```
 
 ### Export Mode Selection
@@ -306,11 +403,13 @@ Register-ScheduledTask -TaskName "RVTools Daily Export" -Action $action -Trigger
 ## Security Considerations
 
 - **Password Encryption**: Uses RVTools' DPAPI-based encryption (same user/computer only)
+- **Secure Secret Storage**: Microsoft Graph ClientSecret stored encrypted in SecretManagement vault
+- **No Plaintext Secrets**: Configuration files contain only secret names, not actual secrets
 - **Least Privilege**: Use a dedicated service account with minimal vCenter permissions
-- **Credential Storage**: Credentials are encrypted in SecretManagement vault
+- **Credential Storage**: All credentials are encrypted in SecretManagement vault
 - **Network Security**: Ensure secure communication to vCenter and SharePoint
 - **File Permissions**: Restrict access to the toolkit directory
-- **Password Rotation**: Use Set-RVToolsCredentials.ps1 to update rotated passwords
+- **Secret Rotation**: Use credential management scripts to update rotated passwords/secrets
 
 ## Troubleshooting
 
@@ -369,6 +468,21 @@ Logging = @{
 ```
 
 ## Recent Updates
+
+### August 2025 v1.4.2 - Unique Log Files Per Run
+
+- **Logging Enhancement**: Log files now include timestamp for unique naming per execution
+- **Email Improvement**: Email reports contain only logs from current run, not entire day
+- **Format Change**: From `RVTools_RunLog_YYYYMMDD.txt` to `RVTools_RunLog_YYYYMMDD_HHMMSS.txt`
+- **Cleaner Reports**: No more cumulative daily logs in email reports
+
+### August 2025 v1.4.1 - Secure Microsoft Graph Secret Storage
+
+- **Enhanced Security**: Microsoft Graph ClientSecret now stored encrypted in SecretManagement vault
+- **New Helper Script**: `Set-MicrosoftGraphCredentials.ps1` for secure secret management
+- **Configuration Change**: Use `ClientSecretName` instead of plaintext `ClientSecret`
+- **No Plaintext Secrets**: Configuration files contain only secret references, not actual secrets
+- **Bug Fix**: Resolved parameter binding issue with Microsoft Graph email function
 
 ### August 2025 v1.3.0 - Chunked Export & Enhanced Credential Management
 

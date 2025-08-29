@@ -6,6 +6,9 @@
     This script tests the configuration file loading, template fallback,
     and configuration validation functionality of the RVTools toolkit.
 
+.VERSION
+    1.4.2
+
 .PARAMETER ConfigPath
     Path to test a specific configuration file.
 

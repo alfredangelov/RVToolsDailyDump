@@ -6,6 +6,9 @@
     This script tests the SecretManagement vault operations, credential storage/retrieval,
     and credential validation functionality of the RVTools toolkit.
 
+.VERSION
+    1.4.2
+
 .PARAMETER TestVault
     Name of the test vault to create (default: RVToolsTest)
 

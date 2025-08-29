@@ -6,6 +6,9 @@
     This script validates and installs required PowerShell modules, initializes
     SecretManagement vaults, and validates the environment for RVTools operations.
 
+.VERSION
+    1.4.2
+
 .PARAMETER ConfigPath
     Path to the configuration file. Defaults to shared/Configuration.psd1.
 
@@ -149,6 +152,22 @@ function Test-SharePointModule {
     }
 }
 
+function Test-MicrosoftGraphModules {
+    $authModule = Test-ModuleAvailable -ModuleName 'Microsoft.Graph.Authentication'
+    $mailModule = Test-ModuleAvailable -ModuleName 'Microsoft.Graph.Mail'
+    
+    if ($authModule -and $mailModule) {
+        Write-Log -Level 'SUCCESS' -Message "Microsoft Graph modules available (Authentication + Mail)"
+        return $true
+    } else {
+        $missing = @()
+        if (-not $authModule) { $missing += 'Microsoft.Graph.Authentication' }
+        if (-not $mailModule) { $missing += 'Microsoft.Graph.Mail' }
+        Write-Log -Level 'INFO' -Message "Microsoft Graph modules missing: $($missing -join ', ') (required for Microsoft Graph email)"
+        return $false
+    }
+}
+
 # Main execution
 Write-Log -Level 'INFO' -Message "Starting RVTools dependency initialization..."
 
@@ -176,6 +195,12 @@ if ($cfg.SharePoint?.Enabled) {
     $requiredModules += @{ Name = 'PnP.PowerShell'; MinimumVersion = '1.12.0' }
 }
 
+# Microsoft Graph modules for email functionality
+if ($cfg.Email?.Enabled -and $cfg.Email?.Method -eq 'MicrosoftGraph') {
+    $requiredModules += @{ Name = 'Microsoft.Graph.Authentication'; MinimumVersion = '1.19.0' }
+    $requiredModules += @{ Name = 'Microsoft.Graph.Mail'; MinimumVersion = '1.19.0' }
+}
+
 # Install required modules
 foreach ($module in $requiredModules) {
     Install-RequiredModule -ModuleName $module.Name -MinimumVersion $module.MinimumVersion
@@ -193,8 +218,15 @@ Initialize-SecretVault -VaultName $vaultName
 $rvtoolsValid = Test-RVToolsPath -RVToolsPath $cfg.RVToolsPath
 
 # Test SharePoint module if needed
+$sharepointValid = $false
 if ($cfg.SharePoint?.Enabled) {
-    Test-SharePointModule | Out-Null
+    $sharepointValid = Test-SharePointModule
+}
+
+# Test Microsoft Graph modules if needed
+$microsoftGraphValid = $false
+if ($cfg.Email?.Enabled -and $cfg.Email?.Method -eq 'MicrosoftGraph') {
+    $microsoftGraphValid = Test-MicrosoftGraphModules
 }
 
 # Create directories
@@ -213,11 +245,21 @@ Write-Log -Level 'INFO' -Message "=== Initialization Summary ==="
 Write-Log -Level 'INFO' -Message "SecretManagement modules: Installed"
 Write-Log -Level 'INFO' -Message "Vault '$vaultName': Initialized"
 Write-Log -Level 'INFO' -Message "RVTools executable: $(if ($rvtoolsValid) { 'Found' } else { 'NOT FOUND' })"
+if ($cfg.SharePoint?.Enabled) {
+    Write-Log -Level 'INFO' -Message "SharePoint PnP module: $(if ($sharepointValid) { 'Available' } else { 'NOT FOUND' })"
+}
+if ($cfg.Email?.Enabled -and $cfg.Email?.Method -eq 'MicrosoftGraph') {
+    Write-Log -Level 'INFO' -Message "Microsoft Graph modules: $(if ($microsoftGraphValid) { 'Available' } else { 'NOT FOUND' })"
+}
 Write-Log -Level 'INFO' -Message "Export directory: $exportsRoot"
 Write-Log -Level 'INFO' -Message "Logs directory: $logsRoot"
 
 if (-not $rvtoolsValid) {
     Write-Log -Level 'WARN' -Message "Please install RVTools and update the configuration before running exports"
+}
+
+if ($cfg.Email?.Enabled -and $cfg.Email?.Method -eq 'MicrosoftGraph' -and -not $microsoftGraphValid) {
+    Write-Log -Level 'WARN' -Message "Microsoft Graph modules required for email functionality. Run with -Force to install them."
 }
 
 Write-Log -Level 'INFO' -Message "Next steps:"

@@ -37,11 +37,19 @@
     # Email configuration (optional)
     Email = @{
         Enabled   = $false
+        Method    = 'SMTP'  # Options: 'SMTP', 'MicrosoftGraph'
         From      = 'rvtools-reporter@example.com'
         To        = @('you@example.com')
+        
+        # SMTP Configuration (when Method = 'SMTP')
         SmtpServer= 'smtp.example.com'
         Port      = 25
         UseSsl    = $false
+        
+        # Microsoft Graph Configuration (when Method = 'MicrosoftGraph')
+        TenantId     = 'your-tenant-id-guid'
+        ClientId     = 'your-client-id-guid'
+        ClientSecretName = 'MicrosoftGraph-ClientSecret'  # SecretManagement vault secret name
     }
 
     # SharePoint integration (optional)

@@ -6,6 +6,9 @@
     This script runs all available tests for the RVTools toolkit components,
     including configuration validation, credential management, and password encryption tests.
 
+.VERSION
+    1.4.2
+
 .PARAMETER TestSuite
     Specific test suite to run. Options: All, Configuration, Credentials, Encryption
 
