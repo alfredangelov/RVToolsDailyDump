@@ -15,6 +15,17 @@
   - Same end result as standard export
   - Automatic cleanup of temporary files
 
+#### Per-Host Export Mode Configuration
+
+- **New Feature**: `ExportMode` property in `HostList.psd1` configuration
+- **Purpose**: Configure export mode on a per-host basis for mixed environments
+- **Options**: `'Normal'` (default) or `'Chunked'` for each individual host
+- **Benefits**:
+  - Ideal for scheduled operations (set once in configuration)
+  - Mix small and large vCenters in the same run
+  - No need to remember which hosts need chunked export
+  - Maintenance-free automation
+
 #### Enhanced Credential Management Features
 
 - **Fixed**: Username parameter support for credential removal
@@ -78,6 +89,29 @@
 
 # Test chunked export without actually running RVTools
 .\RVToolsDump.ps1 -ChunkedExport -DryRun -WhatIf
+```
+
+#### Per-Host Configuration Examples
+
+```powershell
+# Configure mixed normal and chunked export modes in HostList.psd1
+@{
+    Hosts = @(
+        # Small environments use normal export (default)
+        'vcenter01.contoso.local'
+        'vcenter02.contoso.local'
+        
+        # Large environments configured for chunked export
+        @{ Name = 'vcenter-large.contoso.local'; Username = 'svc_rvtools@contoso.local'; ExportMode = 'Chunked' }
+        @{ Name = 'vcenter-huge.contoso.local'; Username = 'admin@vsphere.local'; ExportMode = 'Chunked' }
+        
+        # Explicit normal mode specification
+        @{ Name = 'vcenter-prod.contoso.local'; Username = 'prod_service@contoso.local'; ExportMode = 'Normal' }
+    )
+}
+
+# Then run normally - export modes are automatically applied per host
+.\RVToolsDump.ps1
 ```
 
 #### Enhanced Credential Management

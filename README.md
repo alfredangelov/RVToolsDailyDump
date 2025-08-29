@@ -59,6 +59,9 @@ Edit `shared\HostList.psd1` with your vCenter servers:
         # Hashtable format for specific usernames per host
         @{ Name = 'vcenter03.contoso.local'; Username = 'svc_rvtools@contoso.local' }
         @{ Name = 'vcenter-prod.contoso.local'; Username = 'prod_service@contoso.local' }
+        
+        # Large environments can use chunked export mode
+        @{ Name = 'vcenter-large.contoso.local'; Username = 'svc_rvtools@contoso.local'; ExportMode = 'Chunked' }
     )
 }
 ```
@@ -146,6 +149,38 @@ For large vCenter environments where standard RVTools export crashes due to memo
 2025-08-XX 10:XX:XX [SUCCESS] Successfully merged XX Excel files into final export
 2025-08-XX 10:XX:XX [SUCCESS] Completed partial chunked export (XX/XX tabs)
 ```
+
+### Per-Host Export Mode Configuration
+
+You can configure export mode on a per-host basis in your `HostList.psd1` file, which is ideal for scheduled operations where only specific large environments need chunked export:
+
+```powershell
+@{
+    Hosts = @(
+        # Standard hosts use normal export mode by default
+        'vcenter01.contoso.local'
+        'vcenter02.contoso.local'
+        
+        # Large hosts can be configured for chunked export
+        @{ Name = 'vcenter-large.contoso.local'; Username = 'svc_rvtools@contoso.local'; ExportMode = 'Chunked' }
+        @{ Name = 'vcenter-huge.contoso.local'; Username = 'admin@vsphere.local'; ExportMode = 'Chunked' }
+        
+        # Mix normal and chunked hosts in the same configuration
+        @{ Name = 'vcenter-prod.contoso.local'; Username = 'prod_service@contoso.local'; ExportMode = 'Normal' }
+    )
+}
+```
+
+**ExportMode Options:**
+
+- `'Normal'` (default): Standard RVTools export for smaller environments
+- `'Chunked'`: Individual tab export with merging for large environments
+
+**Benefits of Per-Host Configuration:**
+
+- **Scheduled Operations**: Set once in configuration rather than command-line parameters
+- **Mixed Environments**: Handle both small and large vCenters in the same run
+- **Maintenance-Free**: No need to remember which hosts need special handling
 
 ## ✅ Validated RVTools Integration
 
