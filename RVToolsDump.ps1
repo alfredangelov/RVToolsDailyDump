@@ -17,11 +17,19 @@
 .PARAMETER NoEmail
     Skip sending email even if enabled in configuration.
 
+.PARAMETER ChunkedExport
+    Force chunked export mode for all hosts. Individual hosts can also specify
+    ExportMode = 'Chunked' in the host list configuration. Use this mode when 
+    large vCenter environments cause RVTools to crash during full export. 
+    Each tab is exported individually, reducing memory usage.
+
 .NOTES
+    Version: 1.3.0
     - Keep live config files out of source control. Templates are provided under `shared/`.
     - Credentials are requested securely at runtime. Password is passed to RVTools as plain text
       command-line argument (required by RVTools). Use a low-privilege service account.
     - PowerShell 7+ compatible.
+    - New in v1.3.0: Chunked export mode for large environments with memory issues.
 #>
 
 [CmdletBinding(SupportsShouldProcess = $true)]
@@ -29,7 +37,8 @@ param(
     [Parameter()] [string] $ConfigPath = (Join-Path $PSScriptRoot 'shared/Configuration.psd1'),
     [Parameter()] [string] $HostListPath = (Join-Path $PSScriptRoot 'shared/HostList.psd1'),
     [Parameter()] [switch] $NoEmail,
-    [Parameter()] [switch] $DryRun
+    [Parameter()] [switch] $DryRun,
+    [Parameter()] [switch] $ChunkedExport
 )
 
 Set-StrictMode -Version Latest
@@ -148,13 +157,13 @@ $hostItems = $hostsResult.Data.Hosts
 
 if (-not $hostItems) { throw "Host list is empty in '$($hostsResult.Path)'" }
 
-# Normalize host entries into [pscustomobject] with Name + optional Username
+# Normalize host entries into [pscustomobject] with Name + optional Username + optional ExportMode
 $servers = @(
     foreach ($item in $hostItems) {
     switch ($item.GetType().Name) {
-        'String'      { [pscustomobject]@{ Name = $item; Username = $null } }
-        'Hashtable'   { [pscustomobject]@{ Name = $item.Name; Username = $item.Username } }
-        'PSCustomObject' { [pscustomobject]@{ Name = $item.Name; Username = $item.Username } }
+        'String'      { [pscustomobject]@{ Name = $item; Username = $null; ExportMode = 'Normal' } }
+        'Hashtable'   { [pscustomobject]@{ Name = $item.Name; Username = $item.Username; ExportMode = if ($item.ContainsKey('ExportMode')) { $item.ExportMode } else { 'Normal' } } }
+        'PSCustomObject' { [pscustomobject]@{ Name = $item.Name; Username = $item.Username; ExportMode = if ($item.PSObject.Properties['ExportMode']) { $item.ExportMode } else { 'Normal' } } }
         default       { Write-Warning "Unsupported host list entry type: $($item.GetType().FullName)"; continue }
     }
     }
@@ -232,11 +241,118 @@ function Get-CredForUser {
 $extraArgs = @()
 if ($cfg.RVToolsArgs) { $extraArgs += [string[]]$cfg.RVToolsArgs }
 
+# Define RVTools tabs for chunked export
+$rvToolsTabs = @(
+    @{ Command = 'ExportvInfo2xlsx'; FileName = 'vInfo' },
+    @{ Command = 'ExportvCPU2xlsx'; FileName = 'vCPU' },
+    @{ Command = 'ExportvMemory2xlsx'; FileName = 'vMemory' },
+    @{ Command = 'ExportvDisk2xlsx'; FileName = 'vDisk' },
+    @{ Command = 'ExportvPartition2xlsx'; FileName = 'vPartition' },
+    @{ Command = 'ExportvNetwork2xlsx'; FileName = 'vNetwork' },
+    @{ Command = 'ExportvUSB2xlsx'; FileName = 'vUSB' },
+    @{ Command = 'ExportvCD2xlsx'; FileName = 'vCD' },
+    @{ Command = 'ExportvSnapshot2xlsx'; FileName = 'vSnapshot' },
+    @{ Command = 'ExportvTools2xlsx'; FileName = 'vTools' },
+    @{ Command = 'ExportvSource2xlsx'; FileName = 'vSource' },
+    @{ Command = 'ExportvRP2xlsx'; FileName = 'vRP' },
+    @{ Command = 'ExportvCluster2xlsx'; FileName = 'vCluster' },
+    @{ Command = 'ExportvHost2xlsx'; FileName = 'vHost' },
+    @{ Command = 'ExportvHBA2xlsx'; FileName = 'vHBA' },
+    @{ Command = 'ExportvNIC2xlsx'; FileName = 'vNIC' },
+    @{ Command = 'ExportvSwitch2xlsx'; FileName = 'vSwitch' },
+    @{ Command = 'ExportvPort2xlsx'; FileName = 'vPort' },
+    @{ Command = 'ExportdvSwitch2xlsx'; FileName = 'dvSwitch' },
+    @{ Command = 'ExportdvPort2xlsx'; FileName = 'dvPort' },
+    @{ Command = 'ExportvSC+VMK2xlsx'; FileName = 'vSC_VMK' },
+    @{ Command = 'ExportvDatastore2xlsx'; FileName = 'vDatastore' },
+    @{ Command = 'ExportvMultiPath2xlsx'; FileName = 'vMultiPath' },
+    @{ Command = 'ExportvLicense2xlsx'; FileName = 'vLicense' },
+    @{ Command = 'ExportvFileInfo2xlsx'; FileName = 'vFileInfo' },
+    @{ Command = 'ExportvHealth2xlsx'; FileName = 'vHealth' }
+)
+
+function Merge-ExcelFiles {
+    param(
+        [Parameter(Mandatory)] [string[]] $SourceFiles,
+        [Parameter(Mandatory)] [string] $DestinationFile
+    )
+    
+    # Filter to only existing files
+    $existingFiles = $SourceFiles | Where-Object { Test-Path $_ }
+    
+    if ($existingFiles.Count -eq 0) {
+        Write-Log -Level 'ERROR' -Message "No source files exist to merge"
+        return $false
+    }
+    
+    Write-Log -Message "Merging $($existingFiles.Count) Excel files into $DestinationFile"
+    
+    try {
+        # Load the Excel COM object
+        $excel = New-Object -ComObject Excel.Application
+        $excel.Visible = $false
+        $excel.DisplayAlerts = $false
+        
+        # Open the first file as the destination workbook
+        $destinationWorkbook = $excel.Workbooks.Open($existingFiles[0])
+        Write-Log -Level 'DEBUG' -Message "Opened first file as base: $($existingFiles[0])"
+        
+        # Process remaining files (if any)
+        for ($i = 1; $i -lt $existingFiles.Count; $i++) {
+            $sourceFile = $existingFiles[$i]
+            Write-Log -Level 'DEBUG' -Message "Processing $sourceFile"
+            $sourceWorkbook = $excel.Workbooks.Open($sourceFile)
+            
+            # Copy worksheets from source to destination, but skip vMetaData tabs from subsequent files
+            foreach ($worksheet in $sourceWorkbook.Worksheets) {
+                # Skip vMetaData tabs from files after the first one (they should be identical)
+                if ($worksheet.Name -eq 'vMetaData') {
+                    Write-Log -Level 'DEBUG' -Message "Skipping duplicate vMetaData tab from $sourceFile"
+                    continue
+                }
+                $worksheet.Copy([System.Reflection.Missing]::Value, $destinationWorkbook.Worksheets.Item($destinationWorkbook.Worksheets.Count))
+            }
+            
+            $sourceWorkbook.Close($false)
+            Write-Log -Level 'DEBUG' -Message "Merged worksheets from $sourceFile (excluding duplicate vMetaData)"
+        }
+        
+        # Save the merged workbook with new name
+        $destinationWorkbook.SaveAs($DestinationFile)
+        $destinationWorkbook.Close($false)
+        $excel.Quit()
+        
+        # Clean up COM objects
+        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($destinationWorkbook) | Out-Null
+        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
+        [System.GC]::Collect()
+        
+        Write-Log -Level 'SUCCESS' -Message "Successfully merged $($existingFiles.Count) Excel files into $DestinationFile"
+        return $true
+    } catch {
+        Write-Log -Level 'ERROR' -Message "Failed to merge Excel files: $($_.Exception.Message)"
+        
+        # Cleanup on error
+        try {
+            if ($destinationWorkbook) { $destinationWorkbook.Close($false) }
+            if ($excel) { $excel.Quit() }
+        } catch { }
+        
+        return $false
+    }
+}
+
 $overallStatus = @()
 
 foreach ($server in $servers) {
     $name = $server.Name
     $user = if ($server.Username) { $server.Username } elseif ($defaultUsername) { $defaultUsername } else { '' }
+    $serverExportMode = if ($server.ExportMode) { $server.ExportMode } else { 'Normal' }  # Default to Normal if not specified
+    
+    # Determine if this server should use chunked export
+    $useChunkedExport = $ChunkedExport -or ($serverExportMode -eq 'Chunked')
+    
+    Write-Log -Message "Processing $name with export mode: $serverExportMode"
 
     if (-not $DryRun) {
         if ([string]::IsNullOrWhiteSpace($user) -and $authMethod -eq 'Prompt') {
@@ -267,51 +383,173 @@ foreach ($server in $servers) {
     $exportFileName = "{0}-{1}.xlsx" -f $name, $timestamp
     $exportFile = Join-Path $exportsRoot $exportFileName
 
-    $args = if (-not $DryRun) {
-        @('-c', 'ExportAll2xlsx', '-s', $name, '-u', $cred.UserName, '-p', $passwordArg, '-d', "`"$exportsRoot`"", '-f', $exportFileName) + $extraArgs
-    } else {
-        $simUser = if ($user) { $user } else { '<username>' }
-        $pwdDisplay = if ($usePasswordEncryption) { '<encrypted>' } else { '<redacted>' }
-        @('-c', 'ExportAll2xlsx', '-s', $name, '-u', $simUser, '-p', $pwdDisplay, '-d', "`"$exportsRoot`"", '-f', $exportFileName) + $extraArgs
-    }
-
-    try {
-        if ($PSCmdlet.ShouldProcess($name, 'Run RVTools export')) {
-            if (-not $DryRun) {
-                Write-Log -Message "Starting RVTools export for $name to $exportFile"
-                
-                # Change to RVTools directory (as recommended by Dell)
-                $originalLocation = Get-Location
-                Set-Location (Split-Path $rvtoolsPath -Parent)
-                
-                try {
-                    # Use Start-Process as recommended by Dell's official script
-                    $process = Start-Process -FilePath $rvtoolsPath -ArgumentList $args -NoNewWindow -Wait -PassThru
-                    $code = $process.ExitCode
-                    
-                    if ($code -eq 0) {
-                        Write-Log -Level 'SUCCESS' -Message "Completed export for $name"
-                        $overallStatus += "SUCCESS - $name"
-                    } elseif ($code -eq -1) {
-                        Write-Log -Level 'ERROR' -Message "RVTools connection failed for $name (exit code -1)"
-                        $overallStatus += "CONNECTION FAILED - $name"
-                    } else {
-                        Write-Log -Level 'ERROR' -Message "RVTools exit code $code for $name"
-                        $overallStatus += "FAILURE ($code) - $name"
-                    }
-                } finally {
-                    # Restore original location
-                    Set-Location $originalLocation
-                }
+    if ($useChunkedExport) {
+        # Chunked export mode - export each tab separately then merge
+        Write-Log -Message "Starting chunked export for $name (mode: $serverExportMode)"
+        $tempFiles = @()
+        $allTabsSucceeded = $true
+        $successfulTabs = @()
+        $failedTabs = @()
+        
+        foreach ($tab in $rvToolsTabs) {
+            $tabFileName = "{0}-{1}-{2}.xlsx" -f $name, $timestamp, $tab.FileName
+            $tabFile = Join-Path $exportsRoot $tabFileName
+            
+            $args = if (-not $DryRun) {
+                @('-c', $tab.Command, '-s', $name, '-u', $cred.UserName, '-p', $passwordArg, '-d', "`"$exportsRoot`"", '-f', $tabFileName) + $extraArgs
             } else {
-                Write-Log -Message "[Dry-Run] Would run: $rvtoolsPath $($args -join ' ')"
-                $overallStatus += "DRYRUN - $name"
+                $simUser = if ($user) { $user } else { '<username>' }
+                $pwdDisplay = if ($usePasswordEncryption) { '<encrypted>' } else { '<redacted>' }
+                @('-c', $tab.Command, '-s', $name, '-u', $simUser, '-p', $pwdDisplay, '-d', "`"$exportsRoot`"", '-f', $tabFileName) + $extraArgs
+            }
+            
+            try {
+                if ($PSCmdlet.ShouldProcess($name, "Export $($tab.FileName) tab")) {
+                    if (-not $DryRun) {
+                        Write-Log -Level 'DEBUG' -Message "Exporting $($tab.FileName) tab for $name"
+                        
+                        # Change to RVTools directory
+                        $originalLocation = Get-Location
+                        Set-Location (Split-Path $rvtoolsPath -Parent)
+                        
+                        try {
+                            $process = Start-Process -FilePath $rvtoolsPath -ArgumentList $args -NoNewWindow -Wait -PassThru
+                            $code = $process.ExitCode
+                            
+                            if ($code -eq 0) {
+                                Write-Log -Level 'DEBUG' -Message "Successfully exported $($tab.FileName) tab for $name"
+                                if (Test-Path $tabFile) {
+                                    $tempFiles += $tabFile
+                                    $successfulTabs += $tab.FileName
+                                }
+                            } elseif ($code -eq -1) {
+                                Write-Log -Level 'WARN' -Message "Failed to export $($tab.FileName) tab for $name (connection failed)"
+                                $allTabsSucceeded = $false
+                                $failedTabs += "$($tab.FileName) (connection failed)"
+                            } elseif ($code -eq -1073741819) {
+                                Write-Log -Level 'WARN' -Message "Failed to export $($tab.FileName) tab for $name (crash/memory issue)"
+                                $allTabsSucceeded = $false
+                                $failedTabs += "$($tab.FileName) (crash)"
+                            } else {
+                                Write-Log -Level 'WARN' -Message "Failed to export $($tab.FileName) tab for $name (exit code $code)"
+                                $allTabsSucceeded = $false
+                                $failedTabs += "$($tab.FileName) (exit $code)"
+                            }
+                        } finally {
+                            Set-Location $originalLocation
+                        }
+                    } else {
+                        Write-Log -Message "[Dry-Run] Would export $($tab.FileName): $rvtoolsPath $($args -join ' ')"
+                        $tempFiles += $tabFile  # Simulate file creation for dry run
+                        $successfulTabs += $tab.FileName
+                    }
+                }
+            } catch {
+                Write-Log -Level 'ERROR' -Message "Exception while exporting $($tab.FileName) tab for ${name}: $($_.Exception.Message)"
+                $allTabsSucceeded = $false
+                $failedTabs += "$($tab.FileName) (exception)"
             }
         }
-    } catch {
-        $err = $_
-    Write-Log -Level 'ERROR' -Message "Exception while exporting ${name}: $($err.Exception.Message)"
-    $overallStatus += "ERROR - ${name} - $($err.Exception.Message)"
+        
+        Write-Log -Message "Tab export summary for $name - Successful: $($successfulTabs.Count), Failed: $($failedTabs.Count)"
+        if ($failedTabs.Count -gt 0) {
+            Write-Log -Level 'WARN' -Message "Failed tabs: $($failedTabs -join ', ')"
+        }
+        
+        # Merge all tab files into final export file
+        if ($tempFiles.Count -gt 0) {
+            if (-not $DryRun) {
+                # Filter to only files that actually exist
+                $existingTempFiles = $tempFiles | Where-Object { Test-Path $_ }
+                
+                if ($existingTempFiles.Count -gt 0) {
+                    Write-Log -Message "Found $($existingTempFiles.Count) successful tab exports out of $($tempFiles.Count) attempted"
+                    $mergeSucceeded = Merge-ExcelFiles -SourceFiles $existingTempFiles -DestinationFile $exportFile
+                    
+                    if ($mergeSucceeded) {
+                        # Clean up ALL tab files for this timestamp, including failed/stub files
+                        $allTabPattern = "{0}-{1}-*.xlsx" -f $name, $timestamp
+                        $allTabFiles = Get-ChildItem -Path $exportsRoot -Filter $allTabPattern
+                        foreach ($tabFile in $allTabFiles) {
+                            try {
+                                Remove-Item $tabFile.FullName -Force
+                                Write-Log -Level 'DEBUG' -Message "Cleaned up tab file: $($tabFile.Name)"
+                            } catch {
+                                Write-Log -Level 'WARN' -Message "Failed to remove tab file $($tabFile.Name): $($_.Exception.Message)"
+                            }
+                        }
+                        
+                        if ($allTabsSucceeded) {
+                            Write-Log -Level 'SUCCESS' -Message "Completed chunked export for $name"
+                            $overallStatus += "SUCCESS (CHUNKED) - $name"
+                        } else {
+                            Write-Log -Level 'SUCCESS' -Message "Completed partial chunked export for $name ($($existingTempFiles.Count)/$($tempFiles.Count) tabs)"
+                            $overallStatus += "PARTIAL SUCCESS (CHUNKED $($existingTempFiles.Count)/$($tempFiles.Count)) - $name"
+                        }
+                    } else {
+                        Write-Log -Level 'ERROR' -Message "Failed to merge tab files for $name"
+                        $overallStatus += "MERGE FAILED (CHUNKED) - $name"
+                    }
+                } else {
+                    Write-Log -Level 'ERROR' -Message "No successful tab exports found for $name"
+                    $overallStatus += "NO TABS EXPORTED (CHUNKED) - $name"
+                }
+            } else {
+                Write-Log -Message "[Dry-Run] Would merge $($tempFiles.Count) tab files into $exportFile"
+                $overallStatus += "DRYRUN (CHUNKED) - $name"
+            }
+        } else {
+            Write-Log -Level 'ERROR' -Message "No tab files were created for $name"
+            $overallStatus += "FAILURE (CHUNKED) - $name"
+        }
+    } else {
+        # Standard export mode - export all tabs at once
+        $args = if (-not $DryRun) {
+            @('-c', 'ExportAll2xlsx', '-s', $name, '-u', $cred.UserName, '-p', $passwordArg, '-d', "`"$exportsRoot`"", '-f', $exportFileName) + $extraArgs
+        } else {
+            $simUser = if ($user) { $user } else { '<username>' }
+            $pwdDisplay = if ($usePasswordEncryption) { '<encrypted>' } else { '<redacted>' }
+            @('-c', 'ExportAll2xlsx', '-s', $name, '-u', $simUser, '-p', $pwdDisplay, '-d', "`"$exportsRoot`"", '-f', $exportFileName) + $extraArgs
+        }
+
+        try {
+            if ($PSCmdlet.ShouldProcess($name, 'Run RVTools export')) {
+                if (-not $DryRun) {
+                    Write-Log -Message "Starting RVTools export for $name to $exportFile"
+                    
+                    # Change to RVTools directory (as recommended by Dell)
+                    $originalLocation = Get-Location
+                    Set-Location (Split-Path $rvtoolsPath -Parent)
+                    
+                    try {
+                        # Use Start-Process as recommended by Dell's official script
+                        $process = Start-Process -FilePath $rvtoolsPath -ArgumentList $args -NoNewWindow -Wait -PassThru
+                        $code = $process.ExitCode
+                        
+                        if ($code -eq 0) {
+                            Write-Log -Level 'SUCCESS' -Message "Completed export for $name"
+                            $overallStatus += "SUCCESS - $name"
+                        } elseif ($code -eq -1) {
+                            Write-Log -Level 'ERROR' -Message "RVTools connection failed for $name (exit code -1)"
+                            $overallStatus += "CONNECTION FAILED - $name"
+                        } else {
+                            Write-Log -Level 'ERROR' -Message "RVTools exit code $code for $name"
+                            $overallStatus += "FAILURE ($code) - $name"
+                        }
+                    } finally {
+                        # Restore original location
+                        Set-Location $originalLocation
+                    }
+                } else {
+                    Write-Log -Message "[Dry-Run] Would run: $rvtoolsPath $($args -join ' ')"
+                    $overallStatus += "DRYRUN - $name"
+                }
+            }
+        } catch {
+            $err = $_
+            Write-Log -Level 'ERROR' -Message "Exception while exporting ${name}: $($err.Exception.Message)"
+            $overallStatus += "ERROR - ${name} - $($err.Exception.Message)"
+        }
     }
 }
 

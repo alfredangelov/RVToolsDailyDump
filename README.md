@@ -1,9 +1,10 @@
 # RVTools Daily Dump Toolkit
 
-A reliable, configuration-driven PowerShell toolkit for automating RVTools exports across multiple vCenter servers with secure credential management and optional SharePoint integration. **Now with validated Dell RVTools CLI integration.**
+A reliable, configuration-driven PowerShell toolkit for automating RVTools exports across multiple vCenter servers with secure credential management and optional SharePoint integration. **Now with validated Dell RVTools CLI integration and chunked export mode for large environments.**
 
 ## Features
 
+- **Chunked Export Mode**: Handles large vCenter environments where standard export crashes due to memory issues
 - **Secure Credential Management**: Uses PowerShell SecretManagement for unattended operation
 - **Password Encryption**: Leverages RVTools' own DPAPI-based password encryption (no plaintext passwords)
 - **Configuration-Driven**: Separate configuration and host list files (templates provided)
@@ -65,15 +66,15 @@ Edit `shared\HostList.psd1` with your vCenter servers:
 ### Successful Execution Example
 
 ```text
-2025-08-19 18:34:05 [INFO] Starting RVTools export for vcenter01.example.com
-2025-08-19 18:34:43 [SUCCESS] Completed export for vcenter01.example.com  
-2025-08-19 18:34:43 [INFO] Starting RVTools export for vcenter02.example.com
-2025-08-19 18:35:25 [SUCCESS] Completed export for vcenter02.example.com
-2025-08-19 18:35:25 [INFO] Run complete. Summary: SUCCESS - vcenter01.example.com; SUCCESS - vcenter02.example.com
+2025-08-XX 18:XX:XX [INFO] Starting RVTools export for vcenter01.example.com
+2025-08-XX 18:XX:XX [SUCCESS] Completed export for vcenter01.example.com  
+2025-08-XX 18:XX:XX [INFO] Starting RVTools export for vcenter02.example.com
+2025-08-XX 18:XX:XX [SUCCESS] Completed export for vcenter02.example.com
+2025-08-XX 18:XX:XX [INFO] Run complete. Summary: SUCCESS - vcenter01.example.com; SUCCESS - vcenter02.example.com
 
 Export files created:
-- vcenter01.example.com-20250819_183405.xlsx (338.2 KB)
-- vcenter02.example.com-20250819_183443.xlsx (267.2 KB)
+- vcenter01.example.com-YYYYMMDD_HHMMSS.xlsx (XXX.X KB)
+- vcenter02.example.com-YYYYMMDD_HHMMSS.xlsx (XXX.X KB)
 ```
 
 ### 3. Store Credentials
@@ -102,7 +103,48 @@ Run a dry-run to validate configuration and connectivity:
 Then run a real export:
 
 ```powershell
+# Standard export (existing behavior)
 .\RVToolsDump.ps1
+
+# Chunked export for large environments with memory issues  
+.\RVToolsDump.ps1 -ChunkedExport
+```
+
+## 🚀 Chunked Export Mode (New in v1.3.0)
+
+For large vCenter environments where standard RVTools export crashes due to memory issues, use the new chunked export mode:
+
+```powershell
+.\RVToolsDump.ps1 -ChunkedExport
+```
+
+### How Chunked Export Works
+
+1. **Individual Tab Exports**: Exports each of the 26 RVTools tabs separately (vInfo, vCPU, vMemory, vDisk, etc.)
+2. **Memory Efficiency**: Each tab uses less memory than full export, reducing crash risk
+3. **Fault Tolerance**: Continues even if some tabs fail due to crashes
+4. **Smart Merging**: Uses Excel COM to combine successful tabs into single consolidated file
+   - Automatically excludes duplicate vMetaData tabs (keeps only the first one)
+   - Maintains all unique data while reducing file complexity
+5. **Automatic Cleanup**: Removes all temporary tab files after merge completion
+
+### When to Use Chunked Export
+
+- **Large Environments**: 10,000+ VMs or complex infrastructure
+- **Memory Issues**: Standard export crashes with memory errors
+- **Partial Success Acceptable**: Better to get most data than no data
+- **Troubleshooting**: Identify which specific tabs cause issues
+
+### Example Output
+
+```text
+2025-08-XX 08:XX:XX [INFO] Starting chunked export for vcenter-large.domain.com
+...tab exports...
+2025-08-XX 09:XX:XX [INFO] Tab export summary - Successful: XX, Failed: 2
+2025-08-XX 09:XX:XX [WARN] Failed tabs: vNIC (crash), vSwitch (crash)
+2025-08-XX 09:XX:XX [INFO] Found XX successful tab exports out of XX attempted
+2025-08-XX 10:XX:XX [SUCCESS] Successfully merged XX Excel files into final export
+2025-08-XX 10:XX:XX [SUCCESS] Completed partial chunked export (XX/XX tabs)
 ```
 
 ## ✅ Validated RVTools Integration
@@ -133,14 +175,13 @@ RVToolsDailyDump/
 ├── Upload-ToSharePoint.ps1             # SharePoint integration
 ├── shared/
 │   ├── Configuration-Template.psd1     # Config template
-│   ├── HostList-Template.psd1         # Host list template
-│   ├── Configuration.psd1             # Live config (ignored by Git)
-│   └── HostList.psd1                  # Live host list (ignored by Git)
+│   ├── HostList-Template.psd1          # Host list template
+│   ├── Configuration.psd1              # Live config (ignored by Git)
+│   └── HostList.psd1                   # Live host list (ignored by Git)
 ├── exports/                            # Export files (ignored by Git)
-├── logs/                              # Log files (ignored by Git)
+├── logs/                               # Log files (ignored by Git)
 └── docs/
-    ├── WishList.md                    # Feature roadmap
-    └── RFCs/                          # Change requests
+    └── WishList.md                     # Feature roadmap
 ```
 
 ## Configuration Options
@@ -172,11 +213,25 @@ RVToolsDailyDump/
 # Update a specific credential (e.g., after password rotation)
 .\Set-RVToolsCredentials.ps1 -HostName "vcenter01.contoso.local" -Username "svc_rvtools"
 
-# Remove a stored credential
-.\Set-RVToolsCredentials.ps1 -HostName "vcenter01.contoso.local" -RemoveCredential
+# Remove a stored credential (now supports username specification)
+.\Set-RVToolsCredentials.ps1 -RemoveCredential -HostName "vcenter01.contoso.local" -Username "svc_rvtools"
 
-# List all stored credentials
+# List all stored credentials (improved parsing for complex hostnames)
 .\Set-RVToolsCredentials.ps1 -ListCredentials
+```
+
+### Export Mode Selection
+
+```powershell
+# Standard export (recommended for smaller environments)
+.\RVToolsDump.ps1
+
+# Chunked export (for large environments with memory issues)
+.\RVToolsDump.ps1 -ChunkedExport
+
+# Test either mode without running RVTools
+.\RVToolsDump.ps1 -DryRun
+.\RVToolsDump.ps1 -ChunkedExport -DryRun
 ```
 
 ### SharePoint Integration commands
@@ -280,7 +335,16 @@ Logging = @{
 
 ## Recent Updates
 
-### August 2025 - RVTools CLI Integration Fixes
+### August 2025 v1.3.0 - Chunked Export & Enhanced Credential Management
+
+- **New Feature**: Chunked export mode for large environments (`-ChunkedExport` parameter)
+- **Memory Optimization**: Individual tab exports reduce memory usage and crash risk
+- **Enhanced Reliability**: Fault-tolerant processing continues even if some tabs fail  
+- **Improved Cleanup**: Automatic removal of all temporary files including stub files
+- **Better Credential Management**: Username support for credential removal and improved parsing
+- **Detailed Logging**: Tab-by-tab success/failure reporting with exit code interpretation
+
+### August 2025 v1.2.0 - RVTools CLI Integration Fixes
 
 - **Fixed RVTools CLI execution**: Now uses Dell's recommended approach from `RVToolsBatchMultipleVCs.ps1`
 - **Resolved export file creation issues**: Proper path quoting and parameter structure

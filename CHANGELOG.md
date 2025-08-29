@@ -1,5 +1,132 @@
 # RVTools Daily Dump Toolkit - Changelog
 
+## [1.3.0] - August 29, 2025 - Chunked Export & Enhanced Credential Management
+
+### 🚀 Major New Features
+
+#### Chunked Export Mode for Large Environments
+
+- **New Feature**: `-ChunkedExport` parameter for `RVToolsDump.ps1`
+- **Purpose**: Handles large vCenter environments where standard export crashes due to memory issues
+- **How it works**: Exports each RVTools tab individually (26 tabs total), then merges into single Excel file
+- **Benefits**:
+  - Memory-efficient processing (one tab at a time)
+  - Fault-tolerant (continues even if some tabs fail)
+  - Same end result as standard export
+  - Automatic cleanup of temporary files
+
+#### Enhanced Credential Management Features
+
+- **Fixed**: Username parameter support for credential removal
+- **Improved**: Secret name parsing for hosts/usernames containing dashes
+- **Enhanced**: Better error handling and validation
+
+### 🛠️ Technical Improvements
+
+#### Chunked Export Details
+
+**Individual Tab Commands**:
+
+- 26 separate RVTools export commands (vInfo, vCPU, vMemory, vDisk, etc.)
+- Each tab exported separately to reduce memory usage
+
+**Excel File Merging**:
+
+- Smart merging avoids duplicate vMetaData tabs (keeps only the first one)
+- Proper COM object cleanup and error handling
+- Preserves all data while reducing file complexity
+- Detailed exit code interpretation (connection failures vs crashes vs other errors)
+
+**Smart Merging**:
+
+- Uses Excel COM object to merge worksheets
+- First successful file becomes base workbook
+- Additional worksheets appended from other successful exports
+- Automatic cleanup of all temporary tab files (including failed/stub files)
+
+**Enhanced Logging**:
+
+- Tab-by-tab success/failure reporting
+- Detailed exit code explanations (connection failed, crash, other)
+- Summary showing successful vs failed tab counts
+- Clear indication of partial success scenarios
+
+#### Credential Management Improvements
+
+**Username Support for Removal**:
+
+```powershell
+# Now supports specifying username when removing credentials
+.\Set-RVToolsCredentials.ps1 -RemoveCredential -HostName "host" -Username "user"
+```
+
+**Improved Secret Name Parsing**:
+
+- Fixed parsing of secret names containing dashes in hostname or username
+- Now splits at last dash instead of first dash for correct host/username separation
+
+### 📊 Usage Examples
+
+#### Chunked Export
+
+```powershell
+# Standard export (existing behavior)
+.\RVToolsDump.ps1
+
+# Chunked export for large environments with memory issues
+.\RVToolsDump.ps1 -ChunkedExport
+
+# Test chunked export without actually running RVTools
+.\RVToolsDump.ps1 -ChunkedExport -DryRun -WhatIf
+```
+
+#### Enhanced Credential Management
+
+```powershell
+# Remove credential with specific username
+.\Set-RVToolsCredentials.ps1 -RemoveCredential -HostName "vcenter.domain.com" -Username "specific.user"
+
+# List credentials (now shows correct parsing of complex hostnames)
+.\Set-RVToolsCredentials.ps1 -ListCredentials
+```
+
+### 🔧 Bug Fixes & Improvements
+
+#### Chunked Export Reliability
+
+- **Fixed**: Excel merge error when no worksheets exist (creates base from first successful file)
+- **Fixed**: Cleanup of stub files created by crashed exports
+- **Enhanced**: Pattern-based cleanup removes all tab files after merge completion
+- **Improved**: Distinguishes between different failure types (connection, crash, other)
+
+#### Status Reporting
+
+- **Enhanced**: Detailed status messages showing successful/failed tab counts
+- **Added**: Specific exit code interpretation and logging
+- **Improved**: Clear indication of partial success scenarios
+
+### ✅ Testing & Validation
+
+**Chunked Export Testing**:
+
+- Successfully processed large environment with 20,000+ objects
+- Handled tab crashes gracefully (vNIC and vSwitch tabs failed due to memory)
+- Generated consolidated Excel file with multiple successful tabs
+- Automatic cleanup removed all temporary files
+
+**Credential Management Testing**:
+
+- Verified username parameter works for credential removal
+- Tested complex hostnames with dashes (e.g., "server-host01.domain.local")
+- Confirmed proper secret name parsing and credential listing
+
+### 📚 Documentation & Migration
+
+- **Updated**: README.md with chunked export usage examples
+- **Added**: Troubleshooting section for large environment scenarios
+- **Enhanced**: Credential management examples with username specification
+- **Added**: Performance considerations and memory optimization guidance
+
 ## [1.2.0] - August 19, 2025 - RVTools CLI Integration Fixes
 
 ### 🎉 Major Fixes - RVTools Now Working Correctly

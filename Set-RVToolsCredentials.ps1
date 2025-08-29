@@ -36,6 +36,10 @@
 
 .EXAMPLE
     .\Set-RVToolsCredentials.ps1 -ListCredentials
+
+.NOTES
+    Version: 1.3.0
+    Enhanced in v1.3.0: Username parameter support for credential removal and improved secret name parsing.
 #>
 
 [CmdletBinding(DefaultParameterSetName = 'Single')]
@@ -46,8 +50,10 @@ param(
     [Parameter(ParameterSetName = 'Single', Mandatory)]
     [Parameter(ParameterSetName = 'Remove', Mandatory)]
     [string] $HostName,
-    
-    [Parameter(ParameterSetName = 'Single')] [string] $Username,
+
+    [Parameter(ParameterSetName = 'Single')]
+    [Parameter(ParameterSetName = 'Remove')]
+    [string] $Username,
     [Parameter(ParameterSetName = 'UpdateAll')] [switch] $UpdateAll,
     [Parameter(ParameterSetName = 'Remove')] [switch] $RemoveCredential,
     [Parameter(ParameterSetName = 'List')] [switch] $ListCredentials
@@ -119,13 +125,21 @@ switch ($PSCmdlet.ParameterSetName) {
         $secrets = Get-SecretInfo -Vault $vaultName | Where-Object { $_.Name -like "*-*" }
         if ($secrets) {
             foreach ($secret in $secrets) {
-                $parts = $secret.Name -split '-', 2
+                # Split at the last dash
+                $lastDash = $secret.Name.LastIndexOf('-')
+                if ($lastDash -gt 0) {
+                    $hostName = $secret.Name.Substring(0, $lastDash)
+                    $user = $secret.Name.Substring($lastDash + 1)
+                } else {
+                    $hostName = $secret.Name
+                    $user = ''
+                }
                 $lastModified = if ($secret.Metadata -and $secret.Metadata.ContainsKey('LastModified')) { 
                     $secret.Metadata.LastModified 
                 } else { 
                     'Unknown' 
                 }
-                Write-Host "Host: $($parts[0]) | Username: $($parts[1]) | Type: $($secret.Type) | Modified: $lastModified"
+                Write-Host "Host: $hostName | Username: $user | Type: $($secret.Type) | Modified: $lastModified"
             }
         } else {
             Write-Log -Level 'WARN' -Message "No credentials found in vault: $vaultName"
@@ -133,12 +147,18 @@ switch ($PSCmdlet.ParameterSetName) {
     }
     
     'Remove' {
-        $defaultUser = $cfg.Auth.Username ?? (Read-Host -Prompt "Enter username for $HostName")
-        $secretName = Get-SecretName -HostName $HostName -Username $defaultUser -Pattern $secretPattern
-        
+        # Use provided Username, or prompt, or config default
+        if (-not $Username) {
+            $Username = $cfg.Auth.Username ?? (Read-Host -Prompt "Enter username for $HostName")
+        }
+        if (-not $Username) {
+            Write-Log -Level 'ERROR' -Message "Username is required to remove credential for $HostName"
+            return
+        }
+        $secretName = Get-SecretName -HostName $HostName -Username $Username -Pattern $secretPattern
         try {
             Remove-Secret -Name $secretName -Vault $vaultName -Confirm:$false
-            Write-Log -Level 'SUCCESS' -Message "Removed credential for $HostName ($defaultUser)"
+            Write-Log -Level 'SUCCESS' -Message "Removed credential for $HostName ($Username)"
         } catch {
             Write-Log -Level 'ERROR' -Message "Failed to remove credential: $($_.Exception.Message)"
         }
