@@ -12,6 +12,7 @@
 
 .PARAMETER TestPassword
     Test password to encrypt. If not provided, prompts securely.
+    Note: This is a test script parameter - in production use SecureString.
 
 .PARAMETER ShowEncrypted
     Display the encrypted password (useful for testing).
@@ -29,8 +30,12 @@
 
 [CmdletBinding()]
 param(
-    [Parameter()] [string] $TestPassword,
-    [Parameter()] [switch] $ShowEncrypted
+    # Using string for test convenience - in production, use SecureString
+    [Parameter()] 
+    [string] $TestPassword,
+    
+    [Parameter()] 
+    [switch] $ShowEncrypted
 )
 
 Set-StrictMode -Version Latest
@@ -59,7 +64,9 @@ function Get-RVToolsEncryptedPassword {
 
 function Test-PasswordDecryption {
     param(
-        [Parameter(Mandatory)] [string] $EncryptedPassword
+        # This parameter contains DPAPI-encrypted data, not plaintext
+        [Parameter(Mandatory)] 
+        [string] $EncryptedPassword
     )
     
     try {
