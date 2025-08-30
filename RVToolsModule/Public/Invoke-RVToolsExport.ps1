@@ -144,7 +144,6 @@ function Invoke-RVToolsExport {
         Credentials are encrypted and stored in the local user's SecretStore vault.
 
         Author: Alfred Angelov
-        Company: Fortra
         Version: 2.1.0
         
     .LINK
