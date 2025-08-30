@@ -131,7 +131,6 @@ RVToolsModule/
 ### Supporting Documentation
 
 - **[WishList.md](WishList.md)**: Future enhancement ideas
-- **[Powershell Script Email Service.txt](Powershell%20Script%20Email%20Service.txt)**: Email integration notes
 
 ## Testing
 
