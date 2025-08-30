@@ -67,7 +67,8 @@
         'Get-RVToolsEncryptedPassword',
         'Resolve-RVToolsPath',
         'New-RVToolsDirectory',
-        'Invoke-RVToolsExport'
+        'Invoke-RVToolsExport',
+        'Merge-RVToolsExcelFiles'
     )
 
     # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
@@ -105,7 +106,11 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
-3.0.0 - Phase 3: Enhanced & Polished Professional Module
+3.0.0 - Phase 3: Professional Module with ImportExcel Integration
+- Added ImportExcel module integration for server-friendly Excel processing
+- Eliminated Microsoft Excel installation requirement for chunked exports
+- Enhanced Merge-RVToolsExcelFiles function with ImportExcel support
+- Improved error handling for empty worksheets and partial exports
 - Added comprehensive pipeline support for bulk operations
 - Implemented advanced parameter validation with custom attributes
 - Added support for InfoOnly and Custom export modes
@@ -114,6 +119,7 @@
 - Improved error handling and validation
 - Added custom validation classes for hostname, file paths, and RVTools tabs
 - Performance optimizations for large-scale operations
+- Production tested with large environments (19/26 tabs successfully processed)
 - Ready for PowerShell Gallery publication
 
 2.1.0 - Phase 2: Modularized Main Script

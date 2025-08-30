@@ -45,4 +45,4 @@ This document tracks potential improvements and new features for the RVTools Dai
 - ✅ **Configuration Templates**: Template-based setup for easy deployment (v1.1.0)
 - ✅ **Chunked Export Mode**: Handle large environments with memory-efficient exports (v1.3.0)
 - ✅ **Microsoft Graph Email**: Modern OAuth2 email authentication (v1.4.0)
-- ✅ **Complete Module Architecture**: Professional PowerShell module with advanced features (v2.0.0)
+- ✅ **Complete Module Architecture**: Professional PowerShell module with advanced features (v2.0.1)

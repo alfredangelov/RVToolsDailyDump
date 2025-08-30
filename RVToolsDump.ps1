@@ -24,11 +24,13 @@
     Each tab is exported individually, reducing memory usage.
 
 .NOTES
-    Version: 2.0.0
+    Version: 2.0.1
     - Keep live config files out of source control. Templates are provided under `shared/`.
     - Credentials are requested securely at runtime. Password is passed to RVTools as plain text
       command-line argument (required by RVTools). Use a low-privilege service account.
     - PowerShell 7+ compatible.
+    - New in v2.0.1: ImportExcel module integration - no Microsoft Excel installation required.
+    - New in v2.0.1: ImportExcel module integration replacing Excel COM automation for chunked exports.
     - New in v2.0.0: Complete PowerShell module architecture with professional features.
     - New in v1.4.2: Unique log files per run (YYYYMMDD_HHMMSS format) for cleaner email reports.
     - New in v1.3.0: Chunked export mode for large environments with memory issues.
@@ -202,77 +204,6 @@ $rvToolsTabs = @(
     @{ Command = 'ExportvFileInfo2xlsx'; FileName = 'vFileInfo' },
     @{ Command = 'ExportvHealth2xlsx'; FileName = 'vHealth' }
 )
-
-function Merge-ExcelFiles {
-    param(
-        [Parameter(Mandatory)] [string[]] $SourceFiles,
-        [Parameter(Mandatory)] [string] $DestinationFile
-    )
-    
-    # Filter to only existing files
-    $existingFiles = $SourceFiles | Where-Object { Test-Path $_ }
-    
-    if ($existingFiles.Count -eq 0) {
-        Write-Log -Level 'ERROR' -Message "No source files exist to merge"
-        return $false
-    }
-    
-    Write-Log -Message "Merging $($existingFiles.Count) Excel files into $DestinationFile"
-    
-    try {
-        # Load the Excel COM object
-        $excel = New-Object -ComObject Excel.Application
-        $excel.Visible = $false
-        $excel.DisplayAlerts = $false
-        
-        # Open the first file as the destination workbook
-        $destinationWorkbook = $excel.Workbooks.Open($existingFiles[0])
-        Write-Log -Level 'DEBUG' -Message "Opened first file as base: $($existingFiles[0])"
-        
-        # Process remaining files (if any)
-        for ($i = 1; $i -lt $existingFiles.Count; $i++) {
-            $sourceFile = $existingFiles[$i]
-            Write-Log -Level 'DEBUG' -Message "Processing $sourceFile"
-            $sourceWorkbook = $excel.Workbooks.Open($sourceFile)
-            
-            # Copy worksheets from source to destination, but skip vMetaData tabs from subsequent files
-            foreach ($worksheet in $sourceWorkbook.Worksheets) {
-                # Skip vMetaData tabs from files after the first one (they should be identical)
-                if ($worksheet.Name -eq 'vMetaData') {
-                    Write-Log -Level 'DEBUG' -Message "Skipping duplicate vMetaData tab from $sourceFile"
-                    continue
-                }
-                $worksheet.Copy([System.Reflection.Missing]::Value, $destinationWorkbook.Worksheets.Item($destinationWorkbook.Worksheets.Count))
-            }
-            
-            $sourceWorkbook.Close($false)
-            Write-Log -Level 'DEBUG' -Message "Merged worksheets from $sourceFile (excluding duplicate vMetaData)"
-        }
-        
-        # Save the merged workbook with new name
-        $destinationWorkbook.SaveAs($DestinationFile)
-        $destinationWorkbook.Close($false)
-        $excel.Quit()
-        
-        # Clean up COM objects
-        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($destinationWorkbook) | Out-Null
-        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
-        [System.GC]::Collect()
-        
-        Write-Log -Level 'SUCCESS' -Message "Successfully merged $($existingFiles.Count) Excel files into $DestinationFile"
-        return $true
-    } catch {
-        Write-Log -Level 'ERROR' -Message "Failed to merge Excel files: $($_.Exception.Message)"
-        
-        # Cleanup on error
-        try {
-            if ($destinationWorkbook) { $destinationWorkbook.Close($false) }
-            if ($excel) { $excel.Quit() }
-        } catch { }
-        
-        return $false
-    }
-}
 
 function Send-MicrosoftGraphEmail {
     param(
@@ -474,21 +405,22 @@ foreach ($server in $servers) {
                 
                 if ($existingTempFiles.Count -gt 0) {
                     Write-Log -Message "Found $($existingTempFiles.Count) successful tab exports out of $($tempFiles.Count) attempted"
-                    $mergeSucceeded = Merge-ExcelFiles -SourceFiles $existingTempFiles -DestinationFile $exportFile
+                    # Use module function for Excel merging (ImportExcel-based, no Excel installation required)
+                    $mergeSucceeded = Merge-RVToolsExcelFiles -SourceFiles $existingTempFiles -DestinationFile $exportFile
+                    
+                    # Clean up ALL tab files for this timestamp, including failed/stub files (regardless of merge success)
+                    $allTabPattern = "{0}-{1}-*.xlsx" -f $name, $timestamp
+                    $allTabFiles = Get-ChildItem -Path $exportsRoot -Filter $allTabPattern
+                    foreach ($tabFile in $allTabFiles) {
+                        try {
+                            Remove-Item $tabFile.FullName -Force
+                            Write-Log -Level 'DEBUG' -Message "Cleaned up tab file: $($tabFile.Name)"
+                        } catch {
+                            Write-Log -Level 'WARN' -Message "Failed to remove tab file $($tabFile.Name): $($_.Exception.Message)"
+                        }
+                    }
                     
                     if ($mergeSucceeded) {
-                        # Clean up ALL tab files for this timestamp, including failed/stub files
-                        $allTabPattern = "{0}-{1}-*.xlsx" -f $name, $timestamp
-                        $allTabFiles = Get-ChildItem -Path $exportsRoot -Filter $allTabPattern
-                        foreach ($tabFile in $allTabFiles) {
-                            try {
-                                Remove-Item $tabFile.FullName -Force
-                                Write-Log -Level 'DEBUG' -Message "Cleaned up tab file: $($tabFile.Name)"
-                            } catch {
-                                Write-Log -Level 'WARN' -Message "Failed to remove tab file $($tabFile.Name): $($_.Exception.Message)"
-                            }
-                        }
-                        
                         if ($allTabsSucceeded) {
                             Write-Log -Level 'SUCCESS' -Message "Completed chunked export for $name"
                             $overallStatus += "SUCCESS (CHUNKED) - $name"
@@ -502,6 +434,19 @@ foreach ($server in $servers) {
                     }
                 } else {
                     Write-Log -Level 'ERROR' -Message "No successful tab exports found for $name"
+                    
+                    # Clean up any remaining tab files even if no successful exports
+                    $allTabPattern = "{0}-{1}-*.xlsx" -f $name, $timestamp
+                    $allTabFiles = Get-ChildItem -Path $exportsRoot -Filter $allTabPattern
+                    foreach ($tabFile in $allTabFiles) {
+                        try {
+                            Remove-Item $tabFile.FullName -Force
+                            Write-Log -Level 'DEBUG' -Message "Cleaned up failed tab file: $($tabFile.Name)"
+                        } catch {
+                            Write-Log -Level 'WARN' -Message "Failed to remove tab file $($tabFile.Name): $($_.Exception.Message)"
+                        }
+                    }
+                    
                     $overallStatus += "NO TABS EXPORTED (CHUNKED) - $name"
                 }
             } else {

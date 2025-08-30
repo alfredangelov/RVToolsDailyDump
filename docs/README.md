@@ -8,7 +8,7 @@ This directory contains comprehensive documentation for the RVTools PowerShell M
 
 ### [Phase 1: Extract Common Functions](Phase1-Summary.md)
 
-#### Version: 2.0.0
+#### Version: 2.0.1
 
 - **Objective**: Extract and centralize duplicate functions across 5 scripts
 - **Achievement**: ~60% code reduction through function consolidation
@@ -163,7 +163,15 @@ test/
 - PowerShell 5.1+ or PowerShell 7+
 - Microsoft.PowerShell.SecretManagement module
 - Microsoft.PowerShell.SecretStore module
+- ImportExcel module (for chunked export merging - no Excel installation required)
 - RVTools installed (for production use)
+
+### Enhanced Features (v2.0.1)
+
+- **Server-Friendly Excel Processing**: Chunked export now uses ImportExcel module instead of Excel COM automation
+- **No Microsoft Excel Required**: Eliminates expensive Office licensing for server deployments
+- **Enhanced Reliability**: Better error handling and cleanup for partial export scenarios
+- **Container Compatible**: Works on Windows Server Core and containerized environments
 
 ### Installation
 

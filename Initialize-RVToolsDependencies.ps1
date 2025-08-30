@@ -7,7 +7,7 @@
     SecretManagement vaults, and validates the environment for RVTools operations.
 
 .VERSION
-    2.0.0
+    2.0.1
 
 .PARAMETER ConfigPath
     Path to the configuration file. Defaults to shared/Configuration.psd1.
@@ -205,6 +205,7 @@ if (Get-Command Import-RVToolsConfiguration -ErrorAction SilentlyContinue) {
 $requiredModules = @(
     @{ Name = 'Microsoft.PowerShell.SecretManagement'; MinimumVersion = '1.1.0' }
     @{ Name = 'Microsoft.PowerShell.SecretStore'; MinimumVersion = '1.0.0' }
+    @{ Name = 'ImportExcel'; MinimumVersion = '7.1.0' }  # Required for chunked export Excel merging
 )
 
 # Microsoft Graph modules for email functionality
@@ -254,6 +255,7 @@ foreach ($dir in @($exportsRoot, $logsRoot)) {
 # Summary
 Write-Log -Level 'INFO' -Message "=== Initialization Summary ==="
 Write-Log -Level 'INFO' -Message "SecretManagement modules: Installed"
+Write-Log -Level 'INFO' -Message "ImportExcel module: Installed (for chunked export merging)"
 Write-Log -Level 'INFO' -Message "Vault '$vaultName': Initialized"
 Write-Log -Level 'INFO' -Message "RVTools executable: $(if ($rvtoolsValid) { 'Found' } else { 'NOT FOUND' })"
 

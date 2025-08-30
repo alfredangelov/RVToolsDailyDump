@@ -38,7 +38,7 @@
     .\Set-RVToolsCredentials.ps1 -ListCredentials
 
 .NOTES
-    Version: 2.0.0
+    Version: 2.0.1
     Enhanced in v1.3.0: Username parameter support for credential removal and improved secret name parsing.
 #>
 

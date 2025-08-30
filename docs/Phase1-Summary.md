@@ -134,7 +134,7 @@ Get-RVToolsSecretName -HostName "test.local" -Username "admin"
 
 ### Module Versioning
 
-- **Version**: 2.0.0 (indicates major architectural change)
+- **Version**: 2.0.1 (indicates major architectural change with ImportExcel integration)
 - **PowerShell**: Compatible with 5.1+ and PowerShell 7+
 - **Dependencies**: SecretManagement modules
 

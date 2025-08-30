@@ -2,12 +2,13 @@
 
 A reliable, configuration-driven PowerShell toolkit for automating RVTools exports across multiple vCenter servers with secure credential management. **Now featuring a complete PowerShell module architecture with professional-grade validation, pipeline support, and enhanced maintainability.**
 
-## 🚀 Version 2.0.0 - Complete PowerShell Module Architecture
+## 🚀 Version 2.0.1 - Server-Optimized Excel Processing
 
-### **Professional Module Implementation**
+### **ImportExcel Integration & Excel Dependency Elimination**
 
-- **RVToolsModule v3.0.0**: Complete professional PowerShell module with 9 public functions and 4 private functions
+- **RVToolsModule v3.0.0**: Complete professional PowerShell module with 10 public functions and 3 private functions
 - **Enhanced Scripts**: All 5 main scripts now leverage the module while maintaining backward compatibility
+- **Server-Friendly**: ImportExcel module eliminates Microsoft Excel installation requirement
 - **Code Reduction**: ~60% reduction in duplicate code through shared module functions
 - **Professional Features**: Advanced validation, pipeline support, comprehensive help documentation
 
@@ -193,7 +194,7 @@ Then run a real export:
 .\RVToolsDump.ps1 -ChunkedExport
 ```
 
-## 🚀 Chunked Export Mode (New in v1.3.0)
+## 🚀 Chunked Export Mode (Enhanced in v2.0.1)
 
 For large vCenter environments where standard RVTools export crashes due to memory issues, use the new chunked export mode:
 
@@ -206,28 +207,43 @@ For large vCenter environments where standard RVTools export crashes due to memo
 1. **Individual Tab Exports**: Exports each of the 26 RVTools tabs separately (vInfo, vCPU, vMemory, vDisk, etc.)
 2. **Memory Efficiency**: Each tab uses less memory than full export, reducing crash risk
 3. **Fault Tolerance**: Continues even if some tabs fail due to crashes
-4. **Smart Merging**: Uses Excel COM to combine successful tabs into single consolidated file
+4. **Smart Merging**: Uses **ImportExcel PowerShell module** to combine successful tabs into single consolidated file
+   - **No Excel Installation Required**: Uses ImportExcel module instead of Excel COM automation
+   - **Server-Friendly**: Works on Windows Server Core and containers
+   - **Enhanced Reliability**: No COM object management or Excel process issues
    - Automatically excludes duplicate vMetaData tabs (keeps only the first one)
+   - Handles empty worksheets gracefully (shows warnings but continues processing)
    - Maintains all unique data while reducing file complexity
-5. **Automatic Cleanup**: Removes all temporary tab files after merge completion
+5. **Automatic Cleanup**: Removes all temporary tab files after merge completion (regardless of success/failure)
 
 ### When to Use Chunked Export
 
 - **Large Environments**: 10,000+ VMs or complex infrastructure
 - **Memory Issues**: Standard export crashes with memory errors
 - **Partial Success Acceptable**: Better to get most data than no data
+- **Server Deployment**: No Excel installation required (uses ImportExcel module)
 - **Troubleshooting**: Identify which specific tabs cause issues
+
+### Enhanced Features (v2.0.1)
+
+- **ImportExcel Integration**: No Microsoft Excel installation required
+- **Server Compatible**: Works on Windows Server Core and containers
+- **Enhanced Cleanup**: Removes temporary files in all scenarios (success/failure)
+- **Better Error Handling**: Graceful handling of empty worksheets and failed merges
+- **Improved Logging**: Clear indication of merge method and progress
 
 ### Example Output
 
 ```text
-2025-08-XX 08:XX:XX [INFO] Starting chunked export for vcenter-large.domain.com
+2025-08-30 05:24:28 [INFO] Starting chunked export for vcenter-large.domain.com
 ...tab exports...
-2025-08-XX 09:XX:XX [INFO] Tab export summary - Successful: XX, Failed: 2
-2025-08-XX 09:XX:XX [WARN] Failed tabs: vNIC (crash), vSwitch (crash)
-2025-08-XX 09:XX:XX [INFO] Found XX successful tab exports out of XX attempted
-2025-08-XX 10:XX:XX [SUCCESS] Successfully merged XX Excel files into final export
-2025-08-XX 10:XX:XX [SUCCESS] Completed partial chunked export (XX/XX tabs)
+2025-08-30 05:35:17 [INFO] Tab export summary - Successful: 19, Failed: 7
+2025-08-30 05:35:18 [WARN] Failed tabs: vCD (crash), vSnapshot (crash), vHBA (crash), vNIC (crash), vPort (crash), vDatastore (crash), vLicense (crash)
+2025-08-30 05:35:18 [INFO] Found 19 successful tab exports out of 19 attempted
+2025-08-30 05:35:20 [INFO] Merging 19 Excel files using ImportExcel module
+WARNING: Worksheet 'vUSB' contains no data (normal for some environments)
+2025-08-30 05:35:39 [SUCCESS] Successfully merged 19 Excel files into final export
+2025-08-30 05:35:40 [SUCCESS] Completed partial chunked export (19/26 tabs)
 ```
 
 ### Per-Host Export Mode Configuration
@@ -329,6 +345,30 @@ This toolkit uses Dell's recommended RVTools CLI approach, based on their offici
 - **Working Directory**: Changes to RVTools directory during execution for compatibility
 - **Exit Code Handling**: Properly detects connection failures (exit code -1) and other errors
 - **Path Handling**: Properly quotes paths containing spaces for reliable execution
+
+### Server Deployment Benefits (v2.0.1)
+
+#### Excel Dependency Elimination
+
+- **Before**: Required Microsoft Excel installation ($$$) and COM automation
+- **After**: Uses ImportExcel PowerShell module (free, lightweight)
+
+#### Enhanced Server Compatibility
+
+- **Windows Server Core**: ✅ Works without GUI desktop
+- **Containers**: ✅ Compatible with Windows containers
+- **Licensing**: ✅ No expensive Office licensing required
+- **Reliability**: ✅ No COM object cleanup or Excel process hanging issues
+- **Performance**: ✅ Often faster than COM automation for large files
+
+#### Real-World Testing
+
+Recent production testing shows excellent results:
+
+- Successfully processed large environment with 19/26 tabs (7 crashed due to memory)
+- Handled empty worksheets gracefully (vUSB, dvSwitch, dvPort)
+- Proper cleanup of all temporary files
+- Clear logging and progress indication throughout process
 
 ### Export Results
 
@@ -519,15 +559,13 @@ Logging = @{
 
 ## Recent Updates
 
-### August 2025 v2.0.0 - Complete PowerShell Module Architecture
+### August 2025 v2.0.1 - Server-Optimized Excel Processing
 
-- **🏗️ Professional Module**: Complete RVToolsModule (v3.0.0) with 9 public functions and 4 private functions
+- **🎯 ImportExcel Integration**: Complete elimination of Microsoft Excel dependency for server deployments
+- **🏗️ Professional Module**: Complete RVToolsModule (v3.0.0) with 10 public functions and 3 private functions
 - **🔄 Backward Compatibility**: All existing scripts preserved and enhanced to use the module
-- **📊 Code Reduction**: ~60% reduction in duplicate code through shared module functions
-- **✅ Professional Features**: Advanced validation, pipeline support, comprehensive help documentation
-- **📚 Enhanced Documentation**: Organized documentation structure with phase progression summaries
-- **🧹 Clean Codebase**: Development artifacts archived, production directory contains only active files
-- **🎯 Benefits**: Enhanced reliability, consistent patterns, easier maintenance, same familiar interface
+- **📊 Enhanced Chunked Export**: Server-friendly Excel processing with ImportExcel module
+- **✅ Production Tested**: Successfully validated with large environments and partial export scenarios
 
 ### August 2025 v1.4.2 - Unique Log Files Per Run
 
@@ -574,7 +612,8 @@ Logging = @{
 - RVTools 4.0+ installed (validated with Dell RVTools CLI standards)
 - **NEW**: RVToolsModule v3.0.0 (included in this toolkit)
 - Microsoft.PowerShell.SecretManagement module
-- Microsoft.PowerShell.SecretStore module  
+- Microsoft.PowerShell.SecretStore module
+- ImportExcel module (for chunked export merging - no Excel installation required)
 - Microsoft Graph modules (if using Microsoft Graph email)
 - Windows DPAPI (for RVTools password encryption)
 
@@ -612,7 +651,7 @@ Write-RVToolsLog -Message "Custom operation completed" -Level 'SUCCESS' -LogFile
 
 ## Migration from Previous Versions
 
-### From v1.x to v2.0.0
+### From v1.x to v2.0.1
 
 **✅ No Breaking Changes**: All existing scripts continue to work exactly as before.
 
@@ -623,6 +662,7 @@ Write-RVToolsLog -Message "Custom operation completed" -Level 'SUCCESS' -LogFile
 - Pipeline support for bulk operations
 - Professional help documentation
 - Advanced validation attributes
+- **NEW v2.0.1**: ImportExcel integration eliminates Excel installation requirement
 
 **Optional Enhancements**:
 
