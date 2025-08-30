@@ -42,7 +42,9 @@ function Invoke-RVToolsExport {
         Defines the export strategy to use. Valid values:
         - Normal: Standard RVTools export with all tabs in a single operation (default)
         - Chunked: Exports each tab individually then merges into consolidated Excel file
+        - {TabName}: Export a single specific tab (e.g., 'vLicense', 'vInfo', 'vHost')
         Use Chunked mode for large environments where standard exports might timeout.
+        Use single tab names for lightweight testing or targeted data collection.
 
     .PARAMETER ChunkedExport
         Forces chunked export mode for all servers, equivalent to setting ExportMode to 'Chunked'.
@@ -168,7 +170,6 @@ function Invoke-RVToolsExport {
         [string]$Username,
         
         [Parameter()]
-        [ValidateSet('Normal', 'Chunked', 'InfoOnly', 'Custom')]
         [string]$ExportMode = 'Normal',
         
         [Parameter()]
@@ -192,6 +193,19 @@ function Invoke-RVToolsExport {
     if ($CustomTabs -and $ExportMode -ne 'Custom') {
         Write-Warning "CustomTabs parameter specified but ExportMode is not 'Custom'. CustomTabs will be ignored."
     }
+    
+    # Validate ExportMode - check if it's a valid tab name
+    $validExportModes = @('Normal', 'Chunked', 'InfoOnly', 'Custom')
+    $tabDefinitions = Get-RVToolsTabDefinitions
+    $validTabNames = $tabDefinitions | ForEach-Object { $_.FileName }
+    
+    if ($ExportMode -notin $validExportModes -and $ExportMode -notin $validTabNames) {
+        $availableTabs = $validTabNames -join "', '"
+        throw "Invalid ExportMode '$ExportMode'. Valid options are: 'Normal', 'Chunked', 'InfoOnly', 'Custom', or a specific tab name like '$availableTabs'."
+    }
+    
+    # Determine if this is a single-tab export
+    $isSingleTabExport = $ExportMode -in $validTabNames
     
     # Import SecretManagement module if available and using SecretManagement auth
     try {
@@ -299,8 +313,9 @@ function Invoke-RVToolsExport {
         $user = if ($server.Username) { $server.Username } elseif ($defaultUsername) { $defaultUsername } else { '' }
         $serverExportMode = if ($server.ExportMode) { $server.ExportMode } else { 'Normal' }
         
-        # Determine if this server should use chunked export
+        # Determine export mode type
         $useChunkedExport = $ChunkedExport -or ($serverExportMode -eq 'Chunked')
+        $useSingleTabExport = $serverExportMode -in $validTabNames
         
         Write-RVToolsLog -Message "Processing $name with export mode: $serverExportMode" -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
 
@@ -325,29 +340,54 @@ function Invoke-RVToolsExport {
         $exportFileName = "{0}-{1}.xlsx" -f $name, $timestamp
         $baseFileName = "{0}-{1}" -f $name, $timestamp
 
-        if ($useChunkedExport) {
-            # Chunked export mode
-            $result = Invoke-RVToolsChunkedExport -HostName $name -Credential $cred -RVToolsPath $rvtoolsPath -ExportDirectory $exportsRoot -BaseFileName $baseFileName -UsePasswordEncryption:$usePasswordEncryption -ExtraArgs $extraArgs -DryRun:$DryRun
-            $results += $result
+        if ($useSingleTabExport) {
+            # Single-tab export mode
+            $result = Invoke-RVToolsSingleTabExport -HostName $name -Credential $cred -RVToolsPath $rvtoolsPath -ExportDirectory $exportsRoot -TabName $serverExportMode -BaseFileName $baseFileName -UsePasswordEncryption:$usePasswordEncryption -ExtraArgs $extraArgs -DryRun:$DryRun
             
-            if ($result.Success) {
-                if ($result.FailedTabs -eq 0) {
+            if ($result) {
+                $results += $result
+                
+                if ($result.Success) {
                     Write-RVToolsLog -Level 'SUCCESS' -Message $result.Message -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
                 } else {
-                    Write-RVToolsLog -Level 'SUCCESS' -Message $result.Message -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
+                    Write-RVToolsLog -Level 'ERROR' -Message $result.Message -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
                 }
             } else {
-                Write-RVToolsLog -Level 'ERROR' -Message $result.Message -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
+                Write-RVToolsLog -Level 'ERROR' -Message "No result returned from single-tab export for $name" -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
+            }
+        } elseif ($useChunkedExport) {
+            # Chunked export mode
+            $result = Invoke-RVToolsChunkedExport -HostName $name -Credential $cred -RVToolsPath $rvtoolsPath -ExportDirectory $exportsRoot -BaseFileName $baseFileName -UsePasswordEncryption:$usePasswordEncryption -ExtraArgs $extraArgs -DryRun:$DryRun
+            
+            if ($result) {
+                $results += $result
+                
+                if ($result.Success) {
+                    if ($result.FailedTabs -eq 0) {
+                        Write-RVToolsLog -Level 'SUCCESS' -Message $result.Message -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
+                    } else {
+                        Write-RVToolsLog -Level 'SUCCESS' -Message $result.Message -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
+                    }
+                } else {
+                    Write-RVToolsLog -Level 'ERROR' -Message $result.Message -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
+                }
+            } else {
+                Write-RVToolsLog -Level 'ERROR' -Message "No result returned from chunked export for $name" -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
             }
         } else {
             # Standard export mode
             $result = Invoke-RVToolsStandardExport -HostName $name -Credential $cred -RVToolsPath $rvtoolsPath -ExportDirectory $exportsRoot -ExportFileName $exportFileName -UsePasswordEncryption:$usePasswordEncryption -ExtraArgs $extraArgs -DryRun:$DryRun
-            $results += $result
             
-            if ($result.Success) {
-                Write-RVToolsLog -Level 'SUCCESS' -Message $result.Message -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
+            if ($result) {
+                $results += $result
+                
+                if ($result.Success) {
+                    Write-RVToolsLog -Level 'SUCCESS' -Message $result.Message -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
+                } else {
+                    Write-RVToolsLog -Level 'ERROR' -Message $result.Message -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
+                }
             } else {
-                Write-RVToolsLog -Level 'ERROR' -Message $result.Message -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
+                Write-RVToolsLog -Level 'ERROR' -Message "No result returned from standard export for $name" -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
             }
         }
     }

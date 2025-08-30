@@ -38,7 +38,8 @@
     .\Set-RVToolsCredentials.ps1 -ListCredentials
 
 .NOTES
-    Version: 2.0.1
+    Version: 3.1.0
+    Refactored in v2.1.0: Leverages RVToolsModule functions for better code reuse and consistency.
     Enhanced in v1.3.0: Username parameter support for credential removal and improved secret name parsing.
 #>
 
@@ -89,20 +90,6 @@ try {
     }
 }
 
-function Test-SecretManagement {
-    try {
-        $module = Get-Module -Name Microsoft.PowerShell.SecretManagement -ListAvailable
-        if (-not $module) {
-            throw "Microsoft.PowerShell.SecretManagement module not found"
-        }
-        Import-Module Microsoft.PowerShell.SecretManagement -Force
-        return $true
-    } catch {
-        Write-Log -Level 'ERROR' -Message "SecretManagement not available: $($_.Exception.Message)"
-        return $false
-    }
-}
-
 function Get-SecretName {
     param(
         [Parameter(Mandatory)] [string] $HostName,
@@ -110,44 +97,33 @@ function Get-SecretName {
         [Parameter(Mandatory)] [string] $Pattern
     )
     
-    if (Get-Command Get-RVToolsSecretName -ErrorAction SilentlyContinue) {
-        return Get-RVToolsSecretName -HostName $HostName -Username $Username -Pattern $Pattern
-    } else {
-        # Fallback method
-        return $Pattern -replace '\{HostName\}', $HostName -replace '\{Username\}', $Username
-    }
+    return Get-RVToolsSecretName -HostName $HostName -Username $Username -Pattern $Pattern
 }
 
-# Load configuration
-if (-not (Test-Path $ConfigPath)) {
-    Write-Log -Level 'ERROR' -Message "Configuration file not found: $ConfigPath"
-    exit 1
-}
-
-$cfg = Import-PowerShellDataFile -Path $ConfigPath
-$vaultName = $cfg.Auth.DefaultVault ?? 'RVToolsVault'
-$secretPattern = $cfg.Auth.SecretNamePattern ?? '{HostName}-{Username}'
-
-# Test SecretManagement availability
-if (-not (Test-SecretManagement)) {
-    Write-Log -Level 'ERROR' -Message "Please install Microsoft.PowerShell.SecretManagement module"
-    exit 1
-}
-
-# Test vault availability
+# Load configuration using module function
 try {
-    if (Get-Command Test-RVToolsVault -ErrorAction SilentlyContinue) {
-        $vaultExists = Test-RVToolsVault -VaultName $vaultName
-        if (-not $vaultExists) {
-            throw "Vault test failed"
-        }
-    } else {
-        # Fallback method
-        $vault = Get-SecretVault -Name $vaultName -ErrorAction Stop
+    $configResult = Import-RVToolsConfiguration -ConfigPath $ConfigPath -HostListPath $HostListPath -ScriptRoot $PSScriptRoot
+    $cfg = $configResult.Configuration
+    $vaultName = $cfg.Auth.DefaultVault ?? 'RVToolsVault'
+    $secretPattern = $cfg.Auth.SecretNamePattern ?? '{HostName}-{Username}'
+} catch {
+    Write-Log -Level 'ERROR' -Message "Failed to load configuration: $($_.Exception.Message)"
+    exit 1
+}
+
+# Test SecretManagement and vault availability
+try {
+    Import-Module Microsoft.PowerShell.SecretManagement -Force -ErrorAction Stop
+    
+    $vaultExists = Test-RVToolsVault -VaultName $vaultName
+    if (-not $vaultExists) {
+        Write-Log -Level 'ERROR' -Message "Vault '$vaultName' not found. Please run Initialize-RVToolsDependencies.ps1 first."
+        exit 1
     }
     Write-Log -Level 'INFO' -Message "Using vault: $vaultName"
 } catch {
-    Write-Log -Level 'ERROR' -Message "Vault '$vaultName' not found. Please run Initialize-RVToolsDependencies.ps1 first."
+    Write-Log -Level 'ERROR' -Message "SecretManagement not available or vault test failed: $($_.Exception.Message)"
+    Write-Log -Level 'ERROR' -Message "Please install Microsoft.PowerShell.SecretManagement module and run Initialize-RVToolsDependencies.ps1"
     exit 1
 }
 
@@ -220,14 +196,14 @@ switch ($PSCmdlet.ParameterSetName) {
     }
     
     'UpdateAll' {
-        # Load host list
-        if (-not (Test-Path $HostListPath)) {
-            Write-Log -Level 'ERROR' -Message "Host list file not found: $HostListPath"
+        # Use host list from configuration result
+        $hostItems = $configResult.HostList?.Hosts
+        if (-not $hostItems) { 
+            Write-Log -Level 'ERROR' -Message "Host list is empty in '$($configResult.HostListPath)'"
             exit 1
         }
         
-        $hostData = Import-PowerShellDataFile -Path $HostListPath
-        $hostItems = $hostData.Hosts
+        # Normalize host entries using same logic as main script
         $servers = @(
             foreach ($item in $hostItems) {
                 switch ($item.GetType().Name) {

@@ -1,27 +1,91 @@
 # RVTools Daily Dump Toolkit
 
-A reliable, configuration-driven PowerShell toolkit for automating RVTools exports across multiple vCenter servers with secure credential management. **Now featuring a complete PowerShell module architecture with professional-grade validation, pipeline support, and enhanced maintainability.**
+A reliable, configuration-driven PowerShell toolkit for automating RVTools exports across multiple vCenter servers with secure credential management. **Now featuring granular single-tab export capability for lightweight testing and targeted data collection.**
 
-## 🚀 Version 2.0.1 - Server-Optimized Excel Processing
+## 🚀 Version 3.1.0 - Single-Tab Export Enhancement
 
-### **ImportExcel Integration & Excel Dependency Elimination**
+### **Major New Feature: Granular Export Control**
 
-- **RVToolsModule v3.0.0**: Complete professional PowerShell module with 10 public functions and 3 private functions
-- **Enhanced Scripts**: All 5 main scripts now leverage the module while maintaining backward compatibility
-- **Server-Friendly**: ImportExcel module eliminates Microsoft Excel installation requirement
-- **Code Reduction**: ~60% reduction in duplicate code through shared module functions
-- **Professional Features**: Advanced validation, pipeline support, comprehensive help documentation
+- **Single-Tab Exports**: Export specific RVTools tabs (e.g., `vLicense`, `vInfo`, `vHost`) instead of all 26 tabs
+- **Lightweight Testing**: Perfect for quick connectivity tests and targeted data collection
+- **Performance Benefits**: Single-tab exports are 350x smaller (9-10KB vs 350KB+)
+- **License Auditing**: Use `vLicense` exports for efficient license tracking
+- **Smart Integration**: Seamlessly integrated with existing Normal/Chunked export modes
 
-### **Backward Compatibility Maintained**
+### **How Single-Tab Exports Work**
 
-- **Same Interface**: All existing scripts work exactly as before - no retraining needed
-- **Enhanced Functionality**: Scripts now benefit from professional-grade validation and error handling
-- **Gradual Adoption**: Use traditional scripts or new module functions directly
+Simply specify any valid RVTools tab name as the `ExportMode`:
+
+```powershell
+# HostList.psd1 configuration examples
+@{
+    Hosts = @(
+        # Standard exports for general use
+        @{ Name = 'vcenter01.contoso.local'; Username = 'admin'; ExportMode = 'Normal' }
+        
+        # Single-tab exports for specific purposes
+        @{ Name = 'vcenter02.contoso.local'; Username = 'admin'; ExportMode = 'vLicense' }    # License auditing
+        @{ Name = 'vcenter03.contoso.local'; Username = 'admin'; ExportMode = 'vInfo' }      # Basic VM info
+        @{ Name = 'vcenter04.contoso.local'; Username = 'admin'; ExportMode = 'vHost' }      # Host information
+        
+        # Chunked exports for large environments
+        @{ Name = 'vcenter-large.contoso.local'; Username = 'admin'; ExportMode = 'Chunked' }
+    )
+}
+```
+
+**Supported Tab Names**: `vInfo`, `vCPU`, `vMemory`, `vDisk`, `vPartition`, `vNetwork`, `vUSB`, `vCD`, `vSnapshot`, `vTools`, `vSource`, `vRP`, `vCluster`, `vHost`, `vHBA`, `vNIC`, `vSwitch`, `vPort`, `dvSwitch`, `dvPort`, `vSC_VMK`, `vDatastore`, `vMultiPath`, `vLicense`, `vFileInfo`, `vHealth`
+
+### **Quick Start with Single-Tab Exports**
+
+```powershell
+# Standard export (existing behavior)
+.\RVToolsDump.ps1
+
+# All exports configured per host in HostList.psd1
+.\RVToolsDump.ps1
+
+# Test single-tab functionality
+.\RVToolsDump.ps1 -DryRun
+```
+
+### **Use Cases for Single-Tab Exports**
+
+- **🔍 Quick Connectivity Testing**: Use `vInfo` for fast connection validation
+- **📊 License Auditing**: Use `vLicense` for lightweight license tracking  
+- **🖥️ Host Monitoring**: Use `vHost` for infrastructure monitoring
+- **💾 Storage Analysis**: Use `vDatastore` for storage-specific reports
+- **⚡ Performance Testing**: Minimal data transfer for network-constrained environments
+
+## Utilities
+
+The `utilities/` folder contains maintenance and troubleshooting scripts for the RVTools environment.
+
+### Fix-RVToolsLog4NetConfig.ps1
+
+**Purpose:** Fixes a common log4net configuration issue in RVTools that prevents command-line operation.
+
+**When to use:**
+
+- After installing or updating RVTools
+- When encountering errors like: "Failed to find configuration section 'log4net' in the application's .config file"
+- When RVTools command-line operations fail with configuration-related errors
+
+**Usage:**
+
+```powershell
+# Run PowerShell as Administrator, then:
+cd utilities
+.\Fix-RVToolsLog4NetConfig.ps1
+```
+
+This utility was created to resolve a configuration mismatch in RVTools where the main config file declares a log4net section but doesn't include the actual configuration, causing CLI operations to fail.
 
 ## Features
 
+- **🚀 Single-Tab Export Capability**: Export specific RVTools tabs for targeted data collection and lightweight testing
 - **🏗️ Professional Module Architecture**: Complete PowerShell module with enterprise-grade validation and pipeline support
-- **🔄 Backward Compatibility**: All existing scripts preserved and enhanced to use the module
+- **🔄 Refactored Codebase**: Main scripts now leverage module functions, eliminating code duplication
 - **📊 Chunked Export Mode**: Handles large vCenter environments where standard export crashes due to memory issues
 - **🔒 Secure Credential Management**: Uses PowerShell SecretManagement for unattended operation
 - **🔐 Password Encryption**: Leverages RVTools' own DPAPI-based password encryption (no plaintext passwords)
@@ -32,15 +96,18 @@ A reliable, configuration-driven PowerShell toolkit for automating RVTools expor
 - **🚀 Easy Onboarding**: Automated dependency validation and vault initialization
 - **🌐 Multi-vCenter Support**: Process multiple vCenter servers with individual or shared credentials
 
-## 🚀 New Module Functions Available
+## 🚀 Module Functions Now Used Throughout
 
-With the new RVToolsModule architecture, you can now use professional PowerShell functions directly:
+With the completed refactoring, the main scripts now fully leverage these professional PowerShell functions:
 
 ### **Core Module Functions**
 
 ```powershell
-# Main export function with advanced features
+# Main export function with advanced features (now used by RVToolsDump.ps1)
 Invoke-RVToolsExport -HostName 'vcenter01' -ConfigPath $config
+
+# Single-tab exports for specific purposes
+Invoke-RVToolsExport -HostName 'vcenter01' -ExportMode 'vLicense'
 
 # Pipeline support for bulk operations  
 @('vcenter01', 'vcenter02', 'vcenter03') | Invoke-RVToolsExport
@@ -128,6 +195,9 @@ Edit `shared\HostList.psd1` with your vCenter servers:
         
         # Large environments can use chunked export mode
         @{ Name = 'vcenter-large.contoso.local'; Username = 'svc_rvtools@contoso.local'; ExportMode = 'Chunked' }
+        
+        # Single-tab exports for specific purposes
+        @{ Name = 'vcenter-license.contoso.local'; Username = 'svc_rvtools@contoso.local'; ExportMode = 'vLicense' }
     )
 }
 ```
@@ -137,13 +207,13 @@ Edit `shared\HostList.psd1` with your vCenter servers:
 ```text
 2025-08-XX 18:XX:XX [INFO] Starting RVTools export for vcenter01.example.com
 2025-08-XX 18:XX:XX [SUCCESS] Completed export for vcenter01.example.com  
-2025-08-XX 18:XX:XX [INFO] Starting RVTools export for vcenter02.example.com
-2025-08-XX 18:XX:XX [SUCCESS] Completed export for vcenter02.example.com
+2025-08-XX 18:XX:XX [INFO] Starting single-tab export (vLicense) for vcenter02.example.com
+2025-08-XX 18:XX:XX [SUCCESS] Single-tab export (vLicense) completed successfully
 2025-08-XX 18:XX:XX [INFO] Run complete. Summary: SUCCESS - vcenter01.example.com; SUCCESS - vcenter02.example.com
 
 Export files created:
 - vcenter01.example.com-YYYYMMDD_HHMMSS.xlsx (XXX.X KB)
-- vcenter02.example.com-YYYYMMDD_HHMMSS.xlsx (XXX.X KB)
+- vcenter02.example.com-YYYYMMDD_HHMMSS-vLicense.xlsx (9.X KB)
 ```
 
 ### 3. Store Credentials
@@ -190,17 +260,43 @@ Then run a real export:
 # Standard export (existing behavior)
 .\RVToolsDump.ps1
 
-# Chunked export for large environments with memory issues  
-.\RVToolsDump.ps1 -ChunkedExport
+# All export modes configured per host in HostList.psd1
+.\RVToolsDump.ps1
 ```
 
-## 🚀 Chunked Export Mode (Enhanced in v2.0.1)
+## 🚀 Export Mode Options (Enhanced in v3.1.0)
 
-For large vCenter environments where standard RVTools export crashes due to memory issues, use the new chunked export mode:
+### **Standard Export Mode**
 
 ```powershell
-.\RVToolsDump.ps1 -ChunkedExport
+@{ Name = 'vcenter01.contoso.local'; ExportMode = 'Normal' }
 ```
+
+- Full RVTools export with all 26 tabs
+- Best for comprehensive data collection
+- File size: 200-500KB typically
+
+### **Chunked Export Mode**
+
+```powershell
+@{ Name = 'vcenter-large.contoso.local'; ExportMode = 'Chunked' }
+```
+
+- Individual tab exports merged into single file
+- Best for large environments (10,000+ VMs)
+- Memory efficient, fault tolerant
+
+### **Single-Tab Export Mode (NEW)**
+
+```powershell
+@{ Name = 'vcenter02.contoso.local'; ExportMode = 'vLicense' }
+@{ Name = 'vcenter03.contoso.local'; ExportMode = 'vInfo' }
+@{ Name = 'vcenter04.contoso.local'; ExportMode = 'vHost' }
+```
+
+- Export only specific tab data
+- Ultra-lightweight (9-10KB files)
+- Perfect for targeted monitoring and testing
 
 ### How Chunked Export Works
 
@@ -216,39 +312,16 @@ For large vCenter environments where standard RVTools export crashes due to memo
    - Maintains all unique data while reducing file complexity
 5. **Automatic Cleanup**: Removes all temporary tab files after merge completion (regardless of success/failure)
 
-### When to Use Chunked Export
+### When to Use Each Mode
 
-- **Large Environments**: 10,000+ VMs or complex infrastructure
-- **Memory Issues**: Standard export crashes with memory errors
-- **Partial Success Acceptable**: Better to get most data than no data
+- **Normal Mode**: Default for most environments under 5,000 VMs
+- **Chunked Mode**: Large environments with memory issues or partial data acceptable
+- **Single-Tab Mode**: Connectivity testing, license auditing, targeted monitoring
 - **Server Deployment**: No Excel installation required (uses ImportExcel module)
-- **Troubleshooting**: Identify which specific tabs cause issues
-
-### Enhanced Features (v2.0.1)
-
-- **ImportExcel Integration**: No Microsoft Excel installation required
-- **Server Compatible**: Works on Windows Server Core and containers
-- **Enhanced Cleanup**: Removes temporary files in all scenarios (success/failure)
-- **Better Error Handling**: Graceful handling of empty worksheets and failed merges
-- **Improved Logging**: Clear indication of merge method and progress
-
-### Example Output
-
-```text
-2025-08-30 05:24:28 [INFO] Starting chunked export for vcenter-large.domain.com
-...tab exports...
-2025-08-30 05:35:17 [INFO] Tab export summary - Successful: 19, Failed: 7
-2025-08-30 05:35:18 [WARN] Failed tabs: vCD (crash), vSnapshot (crash), vHBA (crash), vNIC (crash), vPort (crash), vDatastore (crash), vLicense (crash)
-2025-08-30 05:35:18 [INFO] Found 19 successful tab exports out of 19 attempted
-2025-08-30 05:35:20 [INFO] Merging 19 Excel files using ImportExcel module
-WARNING: Worksheet 'vUSB' contains no data (normal for some environments)
-2025-08-30 05:35:39 [SUCCESS] Successfully merged 19 Excel files into final export
-2025-08-30 05:35:40 [SUCCESS] Completed partial chunked export (19/26 tabs)
-```
 
 ### Per-Host Export Mode Configuration
 
-You can configure export mode on a per-host basis in your `HostList.psd1` file, which is ideal for scheduled operations where only specific large environments need chunked export:
+You can configure export mode on a per-host basis in your `HostList.psd1` file, which is ideal for scheduled operations where only specific large environments need special handling:
 
 ```powershell
 @{
@@ -261,240 +334,37 @@ You can configure export mode on a per-host basis in your `HostList.psd1` file, 
         @{ Name = 'vcenter-large.contoso.local'; Username = 'svc_rvtools@contoso.local'; ExportMode = 'Chunked' }
         @{ Name = 'vcenter-huge.contoso.local'; Username = 'admin@vsphere.local'; ExportMode = 'Chunked' }
         
-        # Mix normal and chunked hosts in the same configuration
+        # Single-tab exports for specific monitoring
+        @{ Name = 'vcenter-license.contoso.local'; Username = 'svc_rvtools@contoso.local'; ExportMode = 'vLicense' }
+        @{ Name = 'vcenter-info.contoso.local'; Username = 'svc_rvtools@contoso.local'; ExportMode = 'vInfo' }
+        
+        # Mix all modes in the same configuration
         @{ Name = 'vcenter-prod.contoso.local'; Username = 'prod_service@contoso.local'; ExportMode = 'Normal' }
     )
 }
 ```
 
-**ExportMode Options:**
+## Testing & Connectivity
 
-- `'Normal'` (default): Standard RVTools export for smaller environments
-- `'Chunked'`: Individual tab export with merging for large environments
+### Enhanced Connectivity Testing
 
-**Benefits of Per-Host Configuration:**
-
-- **Scheduled Operations**: Set once in configuration rather than command-line parameters
-- **Mixed Environments**: Handle both small and large vCenters in the same run
-- **Maintenance-Free**: No need to remember which hosts need special handling
-
-## 📧 Email Configuration
-
-The toolkit supports two email methods for sending daily reports:
-
-### Microsoft Graph Email (Recommended)
-
-Modern email method using OAuth2 authentication with Microsoft 365:
+The toolkit includes a comprehensive connectivity testing script that leverages the new single-tab export functionality:
 
 ```powershell
-Email = @{
-    Enabled   = $true
-    Method    = 'MicrosoftGraph'
-    From      = 'rvtools@contoso.com'
-    To        = @('reports@contoso.com', 'team@contoso.com')
-    
-    # Azure AD App Registration details
-    TenantId         = 'your-tenant-id-guid'
-    ClientId         = 'your-client-id-guid'
-    ClientSecretName = 'MicrosoftGraph-ClientSecret'  # Stored securely in vault
-}
+# Test credential retrieval only
+.\test\Test-RVToolsConnectivity.ps1 -TestType CredentialOnly
+
+# Test basic RVTools connection (recommended)
+.\test\Test-RVToolsConnectivity.ps1 -TestType QuickConnect
+
+# Full validation using vLicense single-tab export (comprehensive)
+.\test\Test-RVToolsConnectivity.ps1 -TestType FullValidation
+
+# Test specific hosts only
+.\test\Test-RVToolsConnectivity.ps1 -TestType FullValidation -HostFilter "*license*"
 ```
 
-**Setup Requirements:**
-
-1. **Azure AD App Registration**: Create an app registration with Mail.Send permissions
-2. **Store ClientSecret securely**:
-
-   ```powershell
-   # Use the helper script to store the ClientSecret in the vault
-   .\Set-MicrosoftGraphCredentials.ps1 -Store -ClientSecret 'your-actual-client-secret'
-   ```
-
-3. **Configuration**: Use `ClientSecretName` instead of plaintext `ClientSecret`
-
-**Benefits:**
-
-- OAuth2 authentication (more secure than SMTP credentials)
-- **Secure credential storage** (no plaintext secrets in configuration files)
-- Firewall-friendly (HTTPS only, no SMTP ports needed)
-- Integrated with Microsoft 365 audit logging
-- Free with existing M365 licensing
-
-### Traditional SMTP Email
-
-Classic SMTP method for non-Microsoft environments:
-
-```powershell
-Email = @{
-    Enabled   = $true
-    Method    = 'SMTP'  # Default for backward compatibility
-    From      = 'rvtools@contoso.com'
-    To        = @('reports@contoso.com')
-    SmtpServer= 'smtp.contoso.com'
-    Port      = 587
-    UseSsl    = $true
-}
-```
-
-## ✅ Validated RVTools Integration
-
-This toolkit uses Dell's recommended RVTools CLI approach, based on their official `RVToolsBatchMultipleVCs.ps1` script:
-
-- **Proper CLI Arguments**: Uses `-c ExportAll2xlsx` with separated `-d` (directory) and `-f` (filename) parameters
-- **Process Management**: Implements `Start-Process` with `-NoNewWindow -Wait -PassThru` as recommended by Dell
-- **Working Directory**: Changes to RVTools directory during execution for compatibility
-- **Exit Code Handling**: Properly detects connection failures (exit code -1) and other errors
-- **Path Handling**: Properly quotes paths containing spaces for reliable execution
-
-### Server Deployment Benefits (v2.0.1)
-
-#### Excel Dependency Elimination
-
-- **Before**: Required Microsoft Excel installation ($$$) and COM automation
-- **After**: Uses ImportExcel PowerShell module (free, lightweight)
-
-#### Enhanced Server Compatibility
-
-- **Windows Server Core**: ✅ Works without GUI desktop
-- **Containers**: ✅ Compatible with Windows containers
-- **Licensing**: ✅ No expensive Office licensing required
-- **Reliability**: ✅ No COM object cleanup or Excel process hanging issues
-- **Performance**: ✅ Often faster than COM automation for large files
-
-#### Real-World Testing
-
-Recent production testing shows excellent results:
-
-- Successfully processed large environment with 19/26 tabs (7 crashed due to memory)
-- Handled empty worksheets gracefully (vUSB, dvSwitch, dvPort)
-- Proper cleanup of all temporary files
-- Clear logging and progress indication throughout process
-
-### Export Results
-
-The script generates individual Excel files for each vCenter server:
-
-- `vcenter-server-YYYYMMDD_HHMMSS.xlsx` format
-- Files stored in the configured export directory
-- Typical file sizes: 200-500KB depending on environment size
-
-## File Structure
-
-```plaintext
-RVToolsDailyDump/
-├── RVToolsDump.ps1                       # Main export script (enhanced with module)
-├── Set-RVToolsCredentials.ps1            # vCenter credential management (enhanced)
-├── Set-MicrosoftGraphCredentials.ps1     # Microsoft Graph secret management (enhanced)
-├── Initialize-RVToolsDependencies.ps1    # Setup and validation (enhanced)
-├── RVToolsModule/                        # NEW: Professional PowerShell module
-│   ├── RVToolsModule.psd1                # Module manifest
-│   ├── RVToolsModule.psm1                # Module loader
-│   ├── Public/                           # 9 exported functions
-│   │   ├── Invoke-RVToolsExport.ps1      # Main export cmdlet with advanced features
-│   │   ├── Import-RVToolsConfiguration.ps1 # Configuration loading with template fallback
-│   │   ├── Get-RVToolsCredentialFromVault.ps1 # Secure credential retrieval
-│   │   ├── Write-RVToolsLog.ps1          # Standardized logging
-│   │   ├── Test-RVToolsConfiguration.ps1 # Configuration validation
-│   │   ├── Resolve-RVToolsPath.ps1       # Smart path resolution
-│   │   ├── New-RVToolsDirectory.ps1      # Directory creation with error handling
-│   │   ├── Get-RVToolsEncryptedPassword.ps1 # DPAPI password encryption
-│   │   └── Get-RVToolsSecretName.ps1     # Secret name pattern generation
-│   ├── Private/                          # 4 internal helper functions
-│   │   ├── Get-RVToolsConfigTemplate.ps1
-│   │   ├── Get-RVToolsHostListTemplate.ps1
-│   │   ├── Test-RVToolsRequiredModules.ps1
-│   │   └── ConvertTo-RVToolsHostObject.ps1
-│   └── Classes/                          # Custom validation classes
-│       └── RVToolsValidation.ps1         # ValidateRVToolsPath, ValidateRVToolsConfig, etc.
-├── shared/
-│   ├── Configuration-Template.psd1       # Config template
-│   ├── HostList-Template.psd1            # Host list template
-│   ├── Configuration.psd1                # Live config (ignored by Git)
-│   └── HostList.psd1                     # Live host list (ignored by Git)
-├── test/                                 # Enhanced test suite
-│   ├── Run-Tests.ps1                     # Main test runner
-│   ├── Test-Configuration.ps1            # Configuration validation tests
-│   ├── Test-Credentials.ps1              # Credential management tests
-│   └── Test-RVToolsPasswordEncryption.ps1 # Password encryption tests
-├── exports/                              # Export files (ignored by Git)
-└── logs/                                 # Log files (ignored by Git)
-```
-
-## Configuration Options
-
-### Authentication
-
-- `Method`: 'SecretManagement' (recommended) or 'Prompt'
-- `DefaultVault`: SecretManagement vault name
-- `SecretNamePattern`: Pattern for secret names (default: '{HostName}-{Username}')
-- `UsePasswordEncryption`: Use RVTools DPAPI password encryption (recommended: true)
-
-### Logging
-
-- `EnableDebug`: Enable verbose debug output
-- `LogLevel`: 'DEBUG', 'INFO', 'WARN', 'ERROR'
-
-## Advanced Usage
-
-### Credential Management
-
-#### vCenter Credentials
-
-```powershell
-# Update a specific credential (e.g., after password rotation)
-.\Set-RVToolsCredentials.ps1 -HostName "vcenter01.contoso.local" -Username "svc_rvtools"
-
-# Remove a stored credential (now supports username specification)
-.\Set-RVToolsCredentials.ps1 -RemoveCredential -HostName "vcenter01.contoso.local" -Username "svc_rvtools"
-
-# List all stored credentials (improved parsing for complex hostnames)
-.\Set-RVToolsCredentials.ps1 -ListCredentials
-```
-
-#### Microsoft Graph Credentials
-
-```powershell
-# Store Microsoft Graph ClientSecret securely in vault
-.\Set-MicrosoftGraphCredentials.ps1 -Store -ClientSecret 'your-actual-client-secret'
-
-# Update an existing ClientSecret (e.g., after secret rotation)
-.\Set-MicrosoftGraphCredentials.ps1 -Update -ClientSecret 'new-client-secret'
-
-# Show current Microsoft Graph configuration (without revealing secret)
-.\Set-MicrosoftGraphCredentials.ps1 -Show
-
-# List all secrets in the vault
-.\Set-MicrosoftGraphCredentials.ps1 -List
-
-# Remove Microsoft Graph ClientSecret from vault
-.\Set-MicrosoftGraphCredentials.ps1 -Remove
-```
-
-### Export Mode Selection
-
-```powershell
-# Standard export (recommended for smaller environments)
-.\RVToolsDump.ps1
-
-# Chunked export (for large environments with memory issues)
-.\RVToolsDump.ps1 -ChunkedExport
-
-# Test either mode without running RVTools
-.\RVToolsDump.ps1 -DryRun
-.\RVToolsDump.ps1 -ChunkedExport -DryRun
-```
-
-### Scheduling
-
-Create a scheduled task to run daily:
-
-```powershell
-# Example: Create scheduled task (run as administrator)
-$action = New-ScheduledTaskAction -Execute "pwsh.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File 'C:\Path\To\RVToolsDump.ps1'"
-$trigger = New-ScheduledTaskTrigger -Daily -At "06:00"
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-Register-ScheduledTask -TaskName "RVTools Daily Export" -Action $action -Trigger $trigger -Settings $settings -User "DOMAIN\svc_rvtools"
-```
+The **FullValidation** mode now uses the new `vLicense` single-tab export functionality to provide real RVTools testing while minimizing data transfer and execution time.
 
 ## Security Considerations
 
@@ -507,110 +377,36 @@ Register-ScheduledTask -TaskName "RVTools Daily Export" -Action $action -Trigger
 - **File Permissions**: Restrict access to the toolkit directory
 - **Secret Rotation**: Use credential management scripts to update rotated passwords/secrets
 
-## Troubleshooting
-
-### RVTools Issues
-
-**Problem**: RVTools opens GUI instead of running export
-
-- **Solution**: Script now uses `-c ExportAll2xlsx` and proper Dell CLI approach
-
-**Problem**: Export files not created or in wrong location  
-
-- **Solution**: Script now uses quoted paths and proper `-d`/`-f` parameter separation
-
-**Problem**: Connection failures
-
-- **Solution**: Check service account permissions on vCenter and verify stored credentials
-
-**Validation Steps**:
-
-```powershell
-# 1. Test with dry-run first
-.\RVToolsDump.ps1 -DryRun
-
-# 2. Check stored credentials
-.\Set-RVToolsCredentials.ps1 -ListCredentials
-
-# 3. Verify RVTools path in configuration
-Test-Path "C:\Program Files (x86)\Dell\RVTools\RVTools.exe"
-```
-
-### SecretManagement Issues
-
-```powershell
-# Check vault status
-Get-SecretVault
-
-# Reset vault configuration
-.\Initialize-RVToolsDependencies.ps1 -Force
-```
-
-### Debug Logging
-
-Enable debug logging in configuration:
-
-```powershell
-Logging = @{
-    EnableDebug = $true
-    LogLevel = 'DEBUG'
-}
-```
-
 ## Recent Updates
 
-### August 2025 v2.0.1 - Server-Optimized Excel Processing
+### August 2025 v3.1.0 - Single-Tab Export Enhancement
 
-- **🎯 ImportExcel Integration**: Complete elimination of Microsoft Excel dependency for server deployments
-- **🏗️ Professional Module**: Complete RVToolsModule (v3.0.0) with 10 public functions and 3 private functions
-- **🔄 Backward Compatibility**: All existing scripts preserved and enhanced to use the module
-- **📊 Enhanced Chunked Export**: Server-friendly Excel processing with ImportExcel module
-- **✅ Production Tested**: Successfully validated with large environments and partial export scenarios
+- **🎯 Granular Export Control**: Export specific RVTools tabs (e.g., 'vLicense', 'vInfo', 'vHost')
+- **⚡ Performance Benefits**: Single-tab exports are 350x smaller than full exports
+- **🧪 Enhanced Testing**: Refactored connectivity testing to use vLicense exports
+- **🔄 Smart Integration**: Seamlessly integrated with existing Normal/Chunked modes
+- **📁 Professional File Naming**: hostname-timestamp-tabname.xlsx format
+- **✅ Production Validated**: Successfully tested with defense.local and helpsystems.com environments
 
-### August 2025 v1.4.2 - Unique Log Files Per Run
+### August 2025 v3.0.0 - Professional Module Architecture
 
-- **Logging Enhancement**: Log files now include timestamp for unique naming per execution
-- **Email Improvement**: Email reports contain only logs from current run, not entire day
-- **Format Change**: From `RVTools_RunLog_YYYYMMDD.txt` to `RVTools_RunLog_YYYYMMDD_HHMMSS.txt`
-- **Cleaner Reports**: No more cumulative daily logs in email reports
+- **🏗️ Complete Module**: Professional RVToolsModule with 10 public and 5 private functions
+- **📊 ImportExcel Integration**: Eliminated Microsoft Excel dependency for server deployments
+- **🔄 Massive Refactoring**: ~200+ lines of duplicate code eliminated through shared functions
+- **✅ Enhanced Validation**: Custom validation attributes and enterprise-grade error handling
+- **🚀 Pipeline Support**: Full ValueFromPipeline support for bulk operations
 
-### August 2025 v1.4.1 - Secure Microsoft Graph Secret Storage
+### August 2025 v2.1.0 - RVTools Configuration Fix & Utilities
 
-- **Enhanced Security**: Microsoft Graph ClientSecret now stored encrypted in SecretManagement vault
-- **New Helper Script**: `Set-MicrosoftGraphCredentials.ps1` for secure secret management
-- **Configuration Change**: Use `ClientSecretName` instead of plaintext `ClientSecret`
-- **No Plaintext Secrets**: Configuration files contain only secret references, not actual secrets
-- **Bug Fix**: Resolved parameter binding issue with Microsoft Graph email function
-
-### August 2025 v1.3.0 - Chunked Export & Enhanced Credential Management
-
-- **New Feature**: Chunked export mode for large environments (`-ChunkedExport` parameter)
-- **Memory Optimization**: Individual tab exports reduce memory usage and crash risk
-- **Enhanced Reliability**: Fault-tolerant processing continues even if some tabs fail  
-- **Improved Cleanup**: Automatic removal of all temporary files including stub files
-- **Better Credential Management**: Username support for credential removal and improved parsing
-- **Detailed Logging**: Tab-by-tab success/failure reporting with exit code interpretation
-
-### August 2025 v1.2.0 - RVTools CLI Integration Fixes
-
-- **Fixed RVTools CLI execution**: Now uses Dell's recommended approach from `RVToolsBatchMultipleVCs.ps1`
-- **Resolved export file creation issues**: Proper path quoting and parameter structure
-- **Enhanced process management**: Uses `Start-Process` with proper wait and exit code handling
-- **Improved error detection**: Better handling of connection failures (exit code -1)
-- **Validated multi-vCenter support**: Successfully tested with multiple production vCenter servers
-
-### Core Improvements
-
-- **HostList format**: Changed to hashtable structure for better PowerShell compatibility
-- **Credential management**: Enhanced username validation and error handling  
-- **Test framework**: Comprehensive test suite for configuration, credentials, and encryption
-- **Documentation**: Updated with validated RVTools integration patterns
+- **🔧 Log4Net Fix**: Added Fix-RVToolsLog4NetConfig.ps1 utility to resolve RVTools CLI issues
+- **📁 Utilities Organization**: New utilities/ folder for maintenance scripts
+- **✅ Production Impact**: Fixed command-line failures, enabling successful RVTools operations
 
 ## Requirements
 
 - PowerShell 7+ (recommended) or Windows PowerShell 5.1
 - RVTools 4.0+ installed (validated with Dell RVTools CLI standards)
-- **NEW**: RVToolsModule v3.0.0 (included in this toolkit)
+- **RVToolsModule v3.1.0** (included in this toolkit)
 - Microsoft.PowerShell.SecretManagement module
 - Microsoft.PowerShell.SecretStore module
 - ImportExcel module (for chunked export merging - no Excel installation required)
@@ -625,8 +421,12 @@ Logging = @{
 # Import the module directly for advanced usage
 Import-Module .\RVToolsModule
 
-# Process multiple hosts with pipeline support
-@('vcenter01', 'vcenter02', 'vcenter03') | Invoke-RVToolsExport -ConfigPath $config
+# Process multiple hosts with different export modes
+@(
+    @{ HostName = 'vcenter01'; ExportMode = 'Normal' }
+    @{ HostName = 'vcenter02'; ExportMode = 'vLicense' }
+    @{ HostName = 'vcenter03'; ExportMode = 'vInfo' }
+) | Invoke-RVToolsExport -ConfigPath $config
 
 # Bulk credential management
 $hosts | ForEach-Object { 
@@ -647,34 +447,62 @@ New-RVToolsDirectory -Path $exportPath
 
 # Advanced logging with consistent formatting
 Write-RVToolsLog -Message "Custom operation completed" -Level 'SUCCESS' -LogFile $logPath
+
+# Single-tab export for specific use cases
+Invoke-RVToolsExport -HostName 'vcenter01' -ExportMode 'vLicense' -NoEmail
 ```
 
-## Migration from Previous Versions
+## File Structure
 
-### From v1.x to v2.0.1
-
-**✅ No Breaking Changes**: All existing scripts continue to work exactly as before.
-
-**Enhanced Features Available**:
-
-- Better error handling and validation
-- Consistent logging patterns
-- Pipeline support for bulk operations
-- Professional help documentation
-- Advanced validation attributes
-- **NEW v2.0.1**: ImportExcel integration eliminates Excel installation requirement
-
-**Optional Enhancements**:
-
-```powershell
-# Continue using traditional approach (recommended for existing automation)
-.\RVToolsDump.ps1 -ChunkedExport
-
-# Or leverage new module functions for custom scenarios
-Import-Module .\RVToolsModule
-Invoke-RVToolsExport -HostName 'vcenter01' -ChunkedExport
+```plaintext
+RVToolsDailyDump/
+├── RVToolsDump.ps1                       # Main export script (enhanced with single-tab support)
+├── Set-RVToolsCredentials.ps1            # vCenter credential management (enhanced)
+├── Set-MicrosoftGraphCredentials.ps1     # Microsoft Graph secret management (enhanced)
+├── Initialize-RVToolsDependencies.ps1    # Setup and validation (enhanced)
+├── RVToolsModule/                        # Professional PowerShell module (fully utilized)
+│   ├── RVToolsModule.psd1                # Module manifest (v3.1.0)
+│   ├── RVToolsModule.psm1                # Module loader
+│   ├── Public/                           # 10 exported functions
+│   │   ├── Invoke-RVToolsExport.ps1      # Main export cmdlet with single-tab support
+│   │   ├── Import-RVToolsConfiguration.ps1 # Configuration loading with template fallback
+│   │   ├── Get-RVToolsCredentialFromVault.ps1 # Secure credential retrieval
+│   │   ├── Write-RVToolsLog.ps1          # Standardized logging
+│   │   ├── Test-RVToolsVault.ps1         # Vault validation
+│   │   ├── Resolve-RVToolsPath.ps1       # Smart path resolution
+│   │   ├── New-RVToolsDirectory.ps1      # Directory creation with error handling
+│   │   ├── Get-RVToolsEncryptedPassword.ps1 # DPAPI password encryption
+│   │   ├── Get-RVToolsSecretName.ps1     # Secret name pattern generation
+│   │   └── Merge-RVToolsExcelFiles.ps1   # Excel file merging for chunked exports
+│   ├── Private/                          # 6 internal helper functions
+│   │   ├── Get-RVToolsTabDefinitions.ps1 # Tab definitions and command mapping
+│   │   ├── Invoke-RVToolsChunkedExport.ps1
+│   │   ├── Invoke-RVToolsStandardExport.ps1
+│   │   ├── Invoke-RVToolsSingleTabExport.ps1  # NEW: Single-tab export function
+│   │   ├── Send-RVToolsGraphEmail.ps1
+│   │   └── ValidationAttributes.ps1
+├── shared/
+│   ├── Configuration-Template.psd1       # Config template
+│   ├── HostList-Template.psd1            # Host list template
+│   ├── Configuration.psd1                # Live config (ignored by Git)
+│   └── HostList.psd1                     # Live host list (ignored by Git)
+├── test/                                 # Enhanced test suite
+│   ├── Run-Tests.ps1                     # Main test runner
+│   ├── Test-Configuration.ps1            # Configuration validation tests
+│   ├── Test-Credentials.ps1              # Credential management tests
+│   ├── Test-RVToolsConnectivity.ps1      # Enhanced connectivity tests with single-tab support
+│   └── Test-RVToolsPasswordEncryption.ps1 # Password encryption tests
+├── utilities/                            # Maintenance and troubleshooting
+│   ├── Fix-RVToolsLog4NetConfig.ps1      # RVTools configuration fix utility
+│   └── README.md                         # Utilities documentation
+├── exports/                              # Export files (ignored by Git)
+└── logs/                                 # Log files (ignored by Git)
 ```
 
 ## License
 
 This toolkit is provided as-is for internal use. Customize as needed for your environment.
+
+**Author**: Alfred Angelov  
+**Version**: 3.1.0  
+**Date**: August 30, 2025

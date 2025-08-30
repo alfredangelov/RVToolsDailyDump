@@ -141,6 +141,15 @@ function Invoke-RVToolsStandardExport {
                     Message = "DRYRUN"
                 }
             }
+        } else {
+            # ShouldProcess returned false (user chose not to proceed)
+            return [pscustomobject]@{
+                HostName = $HostName
+                Success = $false
+                ExportFile = $null
+                ExitCode = $null
+                Message = "SKIPPED"
+            }
         }
     } catch {
         $err = $_
