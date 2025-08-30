@@ -24,11 +24,12 @@
     Each tab is exported individually, reducing memory usage.
 
 .NOTES
-    Version: 1.4.2
+    Version: 2.0.0
     - Keep live config files out of source control. Templates are provided under `shared/`.
     - Credentials are requested securely at runtime. Password is passed to RVTools as plain text
       command-line argument (required by RVTools). Use a low-privilege service account.
     - PowerShell 7+ compatible.
+    - New in v2.0.0: Complete PowerShell module architecture with professional features.
     - New in v1.4.2: Unique log files per run (YYYYMMDD_HHMMSS format) for cleaner email reports.
     - New in v1.3.0: Chunked export mode for large environments with memory issues.
 #>
@@ -45,6 +46,15 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Import RVTools module for common functions
+try {
+    Import-Module (Join-Path $PSScriptRoot 'RVToolsModule') -Force -ErrorAction Stop
+    Write-Verbose "RVToolsModule loaded successfully"
+} catch {
+    Write-Error "Failed to load RVToolsModule: $($_.Exception.Message)"
+    exit 1
+}
+
 # Import SecretManagement module if available and using SecretManagement auth
 try {
     if (-not $DryRun) {
@@ -55,71 +65,25 @@ try {
     Write-Warning "SecretManagement module not available. Falling back to prompt authentication."
 }
 
-function Resolve-PathOrCombine {
-    param(
-        [Parameter(Mandatory)] [string] $Path
-    )
-    if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
-    try { return (Resolve-Path -LiteralPath $Path -ErrorAction Stop).Path } catch { return (Join-Path $PSScriptRoot $Path) }
-}
-
-function Ensure-Directory {
-    param([Parameter(Mandatory)] [string] $Path)
-    if (-not (Test-Path -LiteralPath $Path)) {
-        $null = New-Item -ItemType Directory -Force -Path $Path
-    }
-}
-
-function Import-DataFileOrTemplate {
-    param(
-        [Parameter(Mandatory)] [string] $LivePath,
-        [Parameter(Mandatory)] [string] $TemplateName,
-        [Parameter(Mandatory)] [string] $Purpose,
-        [switch] $PreferTemplate
-    )
-    $templatePath = Join-Path $PSScriptRoot ("shared/{0}" -f $TemplateName)
-    if ($PreferTemplate -and (Test-Path -LiteralPath $templatePath)) {
-        Write-Warning "Using template $TemplateName for $Purpose (dry-run or preference)."
-        return [pscustomobject]@{ Data = (Import-PowerShellDataFile -Path $templatePath); UsingTemplate = $true; Path = $templatePath }
-    }
-    if (Test-Path -LiteralPath $LivePath) {
-        try {
-            $data = Import-PowerShellDataFile -Path $LivePath
-            return [pscustomobject]@{ Data = $data; UsingTemplate = $false; Path = $LivePath }
-        } catch {
-            Write-Warning "Failed to parse $Purpose at '$LivePath': $($_.Exception.Message)"
-            if (Test-Path -LiteralPath $templatePath) {
-                Write-Warning "Falling back to template $TemplateName for $Purpose."
-                return [pscustomobject]@{ Data = (Import-PowerShellDataFile -Path $templatePath); UsingTemplate = $true; Path = $templatePath }
-            }
-            throw
-        }
-    } elseif (Test-Path -LiteralPath $templatePath) {
-        Write-Warning "Live $Purpose not found. Using template $TemplateName."
-        return [pscustomobject]@{ Data = (Import-PowerShellDataFile -Path $templatePath); UsingTemplate = $true; Path = $templatePath }
-    } else {
-        throw "Neither live $Purpose ('$LivePath') nor template ('$templatePath') found."
-    }
-}
-
 # Load configuration (prefer live file; fall back to template for discovery)
-$cfgResult = Import-DataFileOrTemplate -LivePath $ConfigPath -TemplateName 'Configuration-Template.psd1' -Purpose 'configuration' -PreferTemplate:$DryRun
-$cfg = $cfgResult.Data
-$usingTemplateCfg = $cfgResult.UsingTemplate
+$configResult = Import-RVToolsConfiguration -ConfigPath $ConfigPath -HostListPath $HostListPath -PreferTemplate:$DryRun -ScriptRoot $PSScriptRoot
+$cfg = $configResult.Configuration
+$usingTemplateCfg = $configResult.UsingTemplateConfig
 $DryRun = $DryRun -or $usingTemplateCfg
 
 # Set up logging configuration
 $script:ConfigLogLevel = $cfg.Logging?.LogLevel ?? 'INFO'
 
 # Resolve paths
-$rvtoolsPath  = Resolve-PathOrCombine -Path ($cfg.RVToolsPath)
-$exportsRoot  = Resolve-PathOrCombine -Path (($cfg.ExportFolder) ?? 'exports')
-$logsRoot     = Resolve-PathOrCombine -Path (($cfg.LogsFolder) ?? 'logs')
+$rvtoolsPath  = Resolve-RVToolsPath -Path ($cfg.RVToolsPath) -ScriptRoot $PSScriptRoot
+$exportsRoot  = Resolve-RVToolsPath -Path (($cfg.ExportFolder) ?? 'exports') -ScriptRoot $PSScriptRoot
+$logsRoot     = Resolve-RVToolsPath -Path (($cfg.LogsFolder) ?? 'logs') -ScriptRoot $PSScriptRoot
 
-Ensure-Directory -Path $exportsRoot
-Ensure-Directory -Path $logsRoot
+New-RVToolsDirectory -Path $exportsRoot
+New-RVToolsDirectory -Path $logsRoot
 
 $script:LogFile = Join-Path $logsRoot ("RVTools_RunLog_{0}.txt" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
+$script:ConfigLogLevel = $cfg.Logging?.LogLevel ?? 'INFO'
 
 function Write-Log {
     param(
@@ -127,21 +91,7 @@ function Write-Log {
         [ValidateSet('INFO','WARN','ERROR','SUCCESS','DEBUG')] [string] $Level = 'INFO'
     )
     
-    # Check if we should log this level
-    $configLogLevel = $script:ConfigLogLevel ?? 'INFO'
-    $logLevels = @('DEBUG', 'INFO', 'WARN', 'ERROR', 'SUCCESS')
-    $currentIndex = $logLevels.IndexOf($configLogLevel)
-    $messageIndex = $logLevels.IndexOf($Level)
-    
-    if ($messageIndex -ge $currentIndex -or $Level -eq 'SUCCESS') {
-        $line = "{0} [{1}] {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
-        
-        if ($script:LogFile) {
-            $line | Tee-Object -FilePath $script:LogFile -Append | Out-Host
-        } else {
-            Write-Host $line
-        }
-    }
+    Write-RVToolsLog -Message $Message -Level $Level -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
 }
 
 if (-not $DryRun) {
@@ -153,10 +103,11 @@ if (-not $DryRun) {
 }
 
 # Load host list
-$hostsResult = Import-DataFileOrTemplate -LivePath $HostListPath -TemplateName 'HostList-Template.psd1' -Purpose 'host list' -PreferTemplate:$DryRun
-$hostItems = $hostsResult.Data.Hosts
+$hostItems = $configResult.HostList?.Hosts
 
-if (-not $hostItems) { throw "Host list is empty in '$($hostsResult.Path)'" }
+if (-not $hostItems) { 
+    throw "Host list is empty in '$($configResult.HostListPath)'" 
+}
 
 # Normalize host entries into [pscustomobject] with Name + optional Username + optional ExportMode
 $servers = @(
@@ -179,26 +130,21 @@ $vaultName = $cfg.Auth?.DefaultVault ?? 'RVToolsVault'
 $secretPattern = $cfg.Auth?.SecretNamePattern ?? '{HostName}-{Username}'
 $usePasswordEncryption = $cfg.Auth?.UsePasswordEncryption ?? $true
 
-function Get-RVToolsEncryptedPassword {
+function Get-RVToolsEncryptedPasswordLocal {
     param(
         [Parameter(Mandatory)] [System.Management.Automation.PSCredential] $Credential
     )
     
-    # Convert password to secure string and then to encrypted string using DPAPI
-    $securePassword = $Credential.Password
-    $encryptedPassword = $securePassword | ConvertFrom-SecureString
-    
-    # Add RVTools prefix so it knows this is an encrypted password
-    return '_RVToolsV3PWD' + $encryptedPassword
+    return Get-RVToolsEncryptedPassword -Credential $Credential
 }
 
-function Get-SecretName {
+function Get-SecretNameLocal {
     param(
         [Parameter(Mandatory)] [string] $HostName,
         [Parameter(Mandatory)] [string] $Username,
         [Parameter(Mandatory)] [string] $Pattern
     )
-    return $Pattern -replace '\{HostName\}', $HostName -replace '\{Username\}', $Username
+    return Get-RVToolsSecretName -HostName $HostName -Username $Username -Pattern $Pattern
 }
 
 # Cache credentials by username
@@ -215,27 +161,12 @@ function Get-CredForUser {
         return $credCache[$cacheKey] 
     }
     
-    $cred = $null
+    $cred = Get-RVToolsCredentialFromVault -HostName $HostName -Username $Username -VaultName $vaultName -SecretPattern $secretPattern -AuthMethod $authMethod -DryRun:$DryRun
     
-    # Try SecretManagement first if configured
-    if ($authMethod -eq 'SecretManagement' -and -not $DryRun) {
-        try {
-            $secretName = Get-SecretName -HostName $HostName -Username $Username -Pattern $secretPattern
-            Write-Log -Level 'DEBUG' -Message "Looking for secret: $secretName in vault: $vaultName"
-            $cred = Get-Secret -Name $secretName -Vault $vaultName -ErrorAction Stop
-            Write-Log -Level 'DEBUG' -Message "Retrieved credential for $Username on $HostName from SecretManagement"
-        } catch {
-            Write-Log -Level 'WARN' -Message "Failed to retrieve credential for $Username on $HostName from SecretManagement: $($_.Exception.Message)"
-            Write-Log -Level 'INFO' -Message "Falling back to prompt authentication"
-        }
+    if ($cred) {
+        $credCache[$cacheKey] = $cred
     }
     
-    # Fall back to prompt if SecretManagement failed or not configured
-    if (-not $cred) {
-        $cred = Get-Credential -UserName $Username -Message "Enter password for $Username on $HostName"
-    }
-    
-    $credCache[$cacheKey] = $cred
     return $cred
 }
 
@@ -450,7 +381,7 @@ foreach ($server in $servers) {
     if (-not $DryRun) {
         $cred = Get-CredForUser -Username $user -HostName $name
         if ($usePasswordEncryption) {
-            $passwordArg = Get-RVToolsEncryptedPassword -Credential $cred
+            $passwordArg = Get-RVToolsEncryptedPasswordLocal -Credential $cred
             Write-Log -Level 'DEBUG' -Message "Using encrypted password for $user on $name"
         } else {
             $passwordArg = $cred.GetNetworkCredential().Password
@@ -474,7 +405,7 @@ foreach ($server in $servers) {
             $tabFileName = "{0}-{1}-{2}.xlsx" -f $name, $timestamp, $tab.FileName
             $tabFile = Join-Path $exportsRoot $tabFileName
             
-            $args = if (-not $DryRun) {
+            $rvToolsArgs = if (-not $DryRun) {
                 @('-c', $tab.Command, '-s', $name, '-u', $cred.UserName, '-p', $passwordArg, '-d', "`"$exportsRoot`"", '-f', $tabFileName) + $extraArgs
             } else {
                 $simUser = if ($user) { $user } else { '<username>' }
@@ -492,7 +423,7 @@ foreach ($server in $servers) {
                         Set-Location (Split-Path $rvtoolsPath -Parent)
                         
                         try {
-                            $process = Start-Process -FilePath $rvtoolsPath -ArgumentList $args -NoNewWindow -Wait -PassThru
+                            $process = Start-Process -FilePath $rvtoolsPath -ArgumentList $rvToolsArgs -NoNewWindow -Wait -PassThru
                             $code = $process.ExitCode
                             
                             if ($code -eq 0) {
@@ -518,7 +449,7 @@ foreach ($server in $servers) {
                             Set-Location $originalLocation
                         }
                     } else {
-                        Write-Log -Message "[Dry-Run] Would export $($tab.FileName): $rvtoolsPath $($args -join ' ')"
+                        Write-Log -Message "[Dry-Run] Would export $($tab.FileName): $rvtoolsPath $($rvToolsArgs -join ' ')"
                         $tempFiles += $tabFile  # Simulate file creation for dry run
                         $successfulTabs += $tab.FileName
                     }
@@ -583,7 +514,7 @@ foreach ($server in $servers) {
         }
     } else {
         # Standard export mode - export all tabs at once
-        $args = if (-not $DryRun) {
+        $rvToolsArgs = if (-not $DryRun) {
             @('-c', 'ExportAll2xlsx', '-s', $name, '-u', $cred.UserName, '-p', $passwordArg, '-d', "`"$exportsRoot`"", '-f', $exportFileName) + $extraArgs
         } else {
             $simUser = if ($user) { $user } else { '<username>' }
@@ -602,7 +533,7 @@ foreach ($server in $servers) {
                     
                     try {
                         # Use Start-Process as recommended by Dell's official script
-                        $process = Start-Process -FilePath $rvtoolsPath -ArgumentList $args -NoNewWindow -Wait -PassThru
+                        $process = Start-Process -FilePath $rvtoolsPath -ArgumentList $rvToolsArgs -NoNewWindow -Wait -PassThru
                         $code = $process.ExitCode
                         
                         if ($code -eq 0) {
@@ -620,7 +551,7 @@ foreach ($server in $servers) {
                         Set-Location $originalLocation
                     }
                 } else {
-                    Write-Log -Message "[Dry-Run] Would run: $rvtoolsPath $($args -join ' ')"
+                    Write-Log -Message "[Dry-Run] Would run: $rvtoolsPath $($rvToolsArgs -join ' ')"
                     $overallStatus += "DRYRUN - $name"
                 }
             }

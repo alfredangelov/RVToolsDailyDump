@@ -38,7 +38,7 @@
     .\Set-RVToolsCredentials.ps1 -ListCredentials
 
 .NOTES
-    Version: 1.4.2
+    Version: 2.0.0
     Enhanced in v1.3.0: Username parameter support for credential removal and improved secret name parsing.
 #>
 
@@ -62,13 +62,31 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-function Write-Log {
-    param(
-        [Parameter(Mandatory)] [string] $Message,
-        [ValidateSet('INFO','WARN','ERROR','SUCCESS')] [string] $Level = 'INFO'
-    )
-    $line = "{0} [{1}] {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
-    Write-Host $line
+# Import RVTools module for common functions
+try {
+    Import-Module (Join-Path $PSScriptRoot 'RVToolsModule') -Force -ErrorAction Stop
+    Write-Verbose "RVToolsModule loaded successfully"
+    
+    # Use module functions
+    function Write-Log {
+        param(
+            [Parameter(Mandatory)] [string] $Message,
+            [ValidateSet('INFO','WARN','ERROR','SUCCESS')] [string] $Level = 'INFO'
+        )
+        Write-RVToolsLog -Message $Message -Level $Level
+    }
+} catch {
+    Write-Warning "RVToolsModule not available. Using local functions."
+    
+    # Fallback function
+    function Write-Log {
+        param(
+            [Parameter(Mandatory)] [string] $Message,
+            [ValidateSet('INFO','WARN','ERROR','SUCCESS')] [string] $Level = 'INFO'
+        )
+        $line = "{0} [{1}] {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
+        Write-Host $line
+    }
 }
 
 function Test-SecretManagement {
@@ -91,7 +109,13 @@ function Get-SecretName {
         [Parameter(Mandatory)] [string] $Username,
         [Parameter(Mandatory)] [string] $Pattern
     )
-    return $Pattern -replace '\{HostName\}', $HostName -replace '\{Username\}', $Username
+    
+    if (Get-Command Get-RVToolsSecretName -ErrorAction SilentlyContinue) {
+        return Get-RVToolsSecretName -HostName $HostName -Username $Username -Pattern $Pattern
+    } else {
+        # Fallback method
+        return $Pattern -replace '\{HostName\}', $HostName -replace '\{Username\}', $Username
+    }
 }
 
 # Load configuration
@@ -112,7 +136,15 @@ if (-not (Test-SecretManagement)) {
 
 # Test vault availability
 try {
-    $vault = Get-SecretVault -Name $vaultName -ErrorAction Stop
+    if (Get-Command Test-RVToolsVault -ErrorAction SilentlyContinue) {
+        $vaultExists = Test-RVToolsVault -VaultName $vaultName
+        if (-not $vaultExists) {
+            throw "Vault test failed"
+        }
+    } else {
+        # Fallback method
+        $vault = Get-SecretVault -Name $vaultName -ErrorAction Stop
+    }
     Write-Log -Level 'INFO' -Message "Using vault: $vaultName"
 } catch {
     Write-Log -Level 'ERROR' -Message "Vault '$vaultName' not found. Please run Initialize-RVToolsDependencies.ps1 first."

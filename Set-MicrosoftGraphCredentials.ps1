@@ -61,19 +61,43 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-function Write-Log {
-    param(
-        [Parameter(Mandatory)] [string] $Message,
-        [ValidateSet('INFO','WARN','ERROR','SUCCESS')] [string] $Level = 'INFO'
-    )
-    $line = "{0} [{1}] {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
-    Write-Host $line
+# Import RVTools module for common functions
+try {
+    Import-Module (Join-Path $PSScriptRoot 'RVToolsModule') -Force -ErrorAction Stop
+    Write-Verbose "RVToolsModule loaded successfully"
+    
+    # Use module functions
+    function Write-Log {
+        param(
+            [Parameter(Mandatory)] [string] $Message,
+            [ValidateSet('INFO','WARN','ERROR','SUCCESS')] [string] $Level = 'INFO'
+        )
+        Write-RVToolsLog -Message $Message -Level $Level
+    }
+} catch {
+    Write-Warning "RVToolsModule not available. Using local functions."
+    
+    # Fallback function
+    function Write-Log {
+        param(
+            [Parameter(Mandatory)] [string] $Message,
+            [ValidateSet('INFO','WARN','ERROR','SUCCESS')] [string] $Level = 'INFO'
+        )
+        $line = "{0} [{1}] {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
+        Write-Host $line
+    }
 }
 
 function Test-VaultExists {
     param([string] $VaultName)
-    $vault = Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue
-    return $null -ne $vault
+    
+    if (Get-Command Test-RVToolsVault -ErrorAction SilentlyContinue) {
+        return Test-RVToolsVault -VaultName $VaultName
+    } else {
+        # Fallback method
+        $vault = Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue
+        return $null -ne $vault
+    }
 }
 
 function Test-SecretExists {

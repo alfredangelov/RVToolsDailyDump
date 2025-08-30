@@ -7,7 +7,7 @@
     SecretManagement vaults, and validates the environment for RVTools operations.
 
 .VERSION
-    1.4.2
+    2.0.0
 
 .PARAMETER ConfigPath
     Path to the configuration file. Defaults to shared/Configuration.psd1.
@@ -35,13 +35,33 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-function Write-Log {
-    param(
-        [Parameter(Mandatory)] [string] $Message,
-        [ValidateSet('INFO','WARN','ERROR','SUCCESS')] [string] $Level = 'INFO'
-    )
-    $line = "{0} [{1}] {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
-    Write-Host $line
+# Import RVTools module for common functions
+try {
+    Import-Module (Join-Path $PSScriptRoot 'RVToolsModule') -Force -ErrorAction Stop
+    Write-Verbose "RVToolsModule loaded successfully"
+} catch {
+    Write-Warning "RVToolsModule not available. Using local functions."
+    
+    # Fallback function if module not available
+    function Write-Log {
+        param(
+            [Parameter(Mandatory)] [string] $Message,
+            [ValidateSet('INFO','WARN','ERROR','SUCCESS')] [string] $Level = 'INFO'
+        )
+        $line = "{0} [{1}] {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
+        Write-Host $line
+    }
+}
+
+# Use module function or fallback
+if (Get-Command Write-RVToolsLog -ErrorAction SilentlyContinue) {
+    function Write-Log {
+        param(
+            [Parameter(Mandatory)] [string] $Message,
+            [ValidateSet('INFO','WARN','ERROR','SUCCESS')] [string] $Level = 'INFO'
+        )
+        Write-RVToolsLog -Message $Message -Level $Level
+    }
 }
 
 function Test-ModuleAvailable {
@@ -142,16 +162,6 @@ function Test-RVToolsPath {
     }
 }
 
-function Test-SharePointModule {
-    if (Test-ModuleAvailable -ModuleName 'PnP.PowerShell') {
-        Write-Log -Level 'SUCCESS' -Message "SharePoint PnP module available"
-        return $true
-    } else {
-        Write-Log -Level 'INFO' -Message "SharePoint PnP module not found (optional for SharePoint integration)"
-        return $false
-    }
-}
-
 function Test-MicrosoftGraphModules {
     $authModule = Test-ModuleAvailable -ModuleName 'Microsoft.Graph.Authentication'
     $mailModule = Test-ModuleAvailable -ModuleName 'Microsoft.Graph.Mail'
@@ -172,28 +182,30 @@ function Test-MicrosoftGraphModules {
 Write-Log -Level 'INFO' -Message "Starting RVTools dependency initialization..."
 
 # Load configuration
-$cfgFile = if (Test-Path $ConfigPath) { 
-    $ConfigPath 
-} elseif (Test-Path (Join-Path $PSScriptRoot 'shared/Configuration-Template.psd1')) {
-    Write-Log -Level 'WARN' -Message "Using template configuration for validation"
-    (Join-Path $PSScriptRoot 'shared/Configuration-Template.psd1')
+if (Get-Command Import-RVToolsConfiguration -ErrorAction SilentlyContinue) {
+    # Use module function
+    $configResult = Import-RVToolsConfiguration -ConfigPath $ConfigPath -ScriptRoot $PSScriptRoot
+    $cfg = $configResult.Configuration
 } else {
-    Write-Log -Level 'ERROR' -Message "Configuration file not found at: $ConfigPath"
-    exit 1
+    # Fallback method
+    $cfgFile = if (Test-Path $ConfigPath) { 
+        $ConfigPath 
+    } elseif (Test-Path (Join-Path $PSScriptRoot 'shared/Configuration-Template.psd1')) {
+        Write-Log -Level 'WARN' -Message "Using template configuration for validation"
+        (Join-Path $PSScriptRoot 'shared/Configuration-Template.psd1')
+    } else {
+        Write-Log -Level 'ERROR' -Message "Configuration file not found at: $ConfigPath"
+        exit 1
+    }
+    
+    $cfg = Import-PowerShellDataFile -Path $cfgFile
 }
-
-$cfg = Import-PowerShellDataFile -Path $cfgFile
 
 # Required modules
 $requiredModules = @(
     @{ Name = 'Microsoft.PowerShell.SecretManagement'; MinimumVersion = '1.1.0' }
     @{ Name = 'Microsoft.PowerShell.SecretStore'; MinimumVersion = '1.0.0' }
 )
-
-# Optional modules based on configuration
-if ($cfg.SharePoint?.Enabled) {
-    $requiredModules += @{ Name = 'PnP.PowerShell'; MinimumVersion = '1.12.0' }
-}
 
 # Microsoft Graph modules for email functionality
 if ($cfg.Email?.Enabled -and $cfg.Email?.Method -eq 'MicrosoftGraph') {
@@ -217,12 +229,6 @@ Initialize-SecretVault -VaultName $vaultName
 # Validate RVTools installation
 $rvtoolsValid = Test-RVToolsPath -RVToolsPath $cfg.RVToolsPath
 
-# Test SharePoint module if needed
-$sharepointValid = $false
-if ($cfg.SharePoint?.Enabled) {
-    $sharepointValid = Test-SharePointModule
-}
-
 # Test Microsoft Graph modules if needed
 $microsoftGraphValid = $false
 if ($cfg.Email?.Enabled -and $cfg.Email?.Method -eq 'MicrosoftGraph') {
@@ -234,9 +240,14 @@ $exportsRoot = Join-Path $PSScriptRoot ($cfg.ExportFolder ?? 'exports')
 $logsRoot = Join-Path $PSScriptRoot ($cfg.LogsFolder ?? 'logs')
 
 foreach ($dir in @($exportsRoot, $logsRoot)) {
-    if (-not (Test-Path $dir)) {
-        New-Item -ItemType Directory -Force -Path $dir | Out-Null
-        Write-Log -Level 'SUCCESS' -Message "Created directory: $dir"
+    if (Get-Command New-RVToolsDirectory -ErrorAction SilentlyContinue) {
+        New-RVToolsDirectory -Path $dir | Out-Null
+    } else {
+        # Fallback method
+        if (-not (Test-Path $dir)) {
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            Write-Log -Level 'SUCCESS' -Message "Created directory: $dir"
+        }
     }
 }
 
@@ -245,9 +256,7 @@ Write-Log -Level 'INFO' -Message "=== Initialization Summary ==="
 Write-Log -Level 'INFO' -Message "SecretManagement modules: Installed"
 Write-Log -Level 'INFO' -Message "Vault '$vaultName': Initialized"
 Write-Log -Level 'INFO' -Message "RVTools executable: $(if ($rvtoolsValid) { 'Found' } else { 'NOT FOUND' })"
-if ($cfg.SharePoint?.Enabled) {
-    Write-Log -Level 'INFO' -Message "SharePoint PnP module: $(if ($sharepointValid) { 'Available' } else { 'NOT FOUND' })"
-}
+
 if ($cfg.Email?.Enabled -and $cfg.Email?.Method -eq 'MicrosoftGraph') {
     Write-Log -Level 'INFO' -Message "Microsoft Graph modules: $(if ($microsoftGraphValid) { 'Available' } else { 'NOT FOUND' })"
 }

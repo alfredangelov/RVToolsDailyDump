@@ -51,13 +51,4 @@
         ClientId     = 'your-client-id-guid'
         ClientSecretName = 'MicrosoftGraph-ClientSecret'  # SecretManagement vault secret name
     }
-
-    # SharePoint integration (optional)
-    SharePoint = @{
-        Enabled = $false
-        SiteUrl = 'https://contoso.sharepoint.com/sites/ITOps'
-        DocumentLibrary = 'RVTools Reports'
-        # Credential for SharePoint (stored in SecretManagement)
-        CredentialSecret = 'SharePoint-ServiceAccount'
-    }
 }

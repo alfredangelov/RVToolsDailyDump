@@ -4,6 +4,9 @@
 shared/Configuration.psd1
 shared/HostList.psd1
 
+# Attic
+attic/*
+
 # Project internal documentation
 docs/*
 

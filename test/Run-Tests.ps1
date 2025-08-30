@@ -10,7 +10,7 @@
     1.4.2
 
 .PARAMETER TestSuite
-    Specific test suite to run. Options: All, Configuration, Credentials, Encryption
+    Specific test suite to run. Options: All, Configuration, Credentials, Encryption, Module
 
 .PARAMETER NoCleanup
     Skip cleanup operations (preserve test vaults, files, etc.)
@@ -22,13 +22,16 @@
     .\Run-Tests.ps1 -TestSuite Configuration
 
 .EXAMPLE
+    .\Run-Tests.ps1 -TestSuite Module
+
+.EXAMPLE
     .\Run-Tests.ps1 -Verbose -NoCleanup
 #>
 
 [CmdletBinding()]
 param(
     [Parameter()] 
-    [ValidateSet('All', 'Configuration', 'Credentials', 'Encryption')]
+    [ValidateSet('All', 'Configuration', 'Credentials', 'Encryption', 'Module')]
     [string] $TestSuite = 'All',
     
     [Parameter()] [switch] $NoCleanup
@@ -66,7 +69,8 @@ function Invoke-TestScript {
     param(
         [Parameter(Mandatory)] [string] $ScriptPath,
         [Parameter(Mandatory)] [string] $TestName,
-        [Parameter()] [hashtable] $Parameters = @{}
+        [Parameter()] [hashtable] $Parameters = @{},
+        [Parameter()] [switch] $IsPester
     )
     
     Write-Log -Level 'INFO' -Message "Running: $TestName"
@@ -79,41 +83,76 @@ function Invoke-TestScript {
         
         $startTime = Get-Date
         
-        # Build parameter string for splatting
-        $paramString = ""
-        if ($Parameters.Count -gt 0) {
-            $paramArray = @()
-            foreach ($key in $Parameters.Keys) {
-                $value = $Parameters[$key]
-                if ($value -is [bool]) {
-                    if ($value) {
-                        $paramArray += "-$key"
-                    } else {
-                        $paramArray += "-$key" + ':$false'
-                    }
-                } else {
-                    $paramArray += "-$key `"$value`""
+        if ($IsPester) {
+            # Handle Pester tests
+            try {
+                $pesterModule = Get-Module Pester -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
+                if (-not $pesterModule) {
+                    Write-Log -Level 'WARN' -Message "Pester module not found. Skipping Pester tests."
+                    return $true  # Don't fail the overall test suite
                 }
+                
+                Import-Module Pester -Force
+                
+                $config = New-PesterConfiguration
+                $config.Run.Path = $ScriptPath
+                $config.Output.Verbosity = 'Normal'
+                $config.Run.PassThru = $true
+                
+                $result = Invoke-Pester -Configuration $config
+                
+                $duration = (Get-Date) - $startTime
+                
+                if ($result.FailedCount -eq 0) {
+                    Write-Log -Level 'SUCCESS' -Message "$TestName completed successfully - $($result.PassedCount)/$($result.TotalCount) tests passed (Duration: $($duration.TotalSeconds.ToString('F1'))s)"
+                    return $true
+                } else {
+                    Write-Log -Level 'FAIL' -Message "$TestName failed - $($result.FailedCount) out of $($result.TotalCount) tests failed (Duration: $($duration.TotalSeconds.ToString('F1'))s)"
+                    return $false
+                }
+                
+            } catch {
+                Write-Log -Level 'ERROR' -Message "Pester execution failed: $($_.Exception.Message)"
+                return $false
             }
-            $paramString = $paramArray -join ' '
-        }
-        
-        # Execute the test script
-        $result = if ($paramString) {
-            Invoke-Expression "& `"$ScriptPath`" $paramString"
         } else {
-            & $ScriptPath
-        }
-        
-        $duration = (Get-Date) - $startTime
-        $exitCode = $LASTEXITCODE
-        
-        if ($exitCode -eq 0 -or $result -eq $true) {
-            Write-Log -Level 'SUCCESS' -Message "$TestName completed successfully (Duration: $($duration.TotalSeconds.ToString('F1'))s)"
-            return $true
-        } else {
-            Write-Log -Level 'FAIL' -Message "$TestName failed (Exit Code: $exitCode, Duration: $($duration.TotalSeconds.ToString('F1'))s)"
-            return $false
+            # Handle regular PowerShell tests
+            # Build parameter string for splatting
+            $paramString = ""
+            if ($Parameters.Count -gt 0) {
+                $paramArray = @()
+                foreach ($key in $Parameters.Keys) {
+                    $value = $Parameters[$key]
+                    if ($value -is [bool]) {
+                        if ($value) {
+                            $paramArray += "-$key"
+                        } else {
+                            $paramArray += "-$key" + ':$false'
+                        }
+                    } else {
+                        $paramArray += "-$key `"$value`""
+                    }
+                }
+                $paramString = $paramArray -join ' '
+            }
+            
+            # Execute the test script
+            $result = if ($paramString) {
+                Invoke-Expression "& `"$ScriptPath`" $paramString"
+            } else {
+                & $ScriptPath
+            }
+            
+            $duration = (Get-Date) - $startTime
+            $exitCode = $LASTEXITCODE
+            
+            if ($exitCode -eq 0 -or $result -eq $true) {
+                Write-Log -Level 'SUCCESS' -Message "$TestName completed successfully (Duration: $($duration.TotalSeconds.ToString('F1'))s)"
+                return $true
+            } else {
+                Write-Log -Level 'FAIL' -Message "$TestName failed (Exit Code: $exitCode, Duration: $($duration.TotalSeconds.ToString('F1'))s)"
+                return $false
+            }
         }
     } catch {
         Write-Log -Level 'ERROR' -Message "$TestName threw exception: $($_.Exception.Message)"
@@ -181,6 +220,12 @@ $availableTests = @{
         Name = 'Password Encryption Tests'
         Parameters = @{}
     }
+    'Module' = @{
+        Script = Join-Path $testDirectory 'RVToolsModule.Tests.ps1'
+        Name = 'RVToolsModule Pester Tests'
+        Parameters = @{}
+        IsPester = $true
+    }
 }
 
 # Determine which tests to run
@@ -189,6 +234,7 @@ $testsToRun = switch ($TestSuite) {
     'Configuration' { @('Configuration') }
     'Credentials' { @('Credentials') }
     'Encryption' { @('Encryption') }
+    'Module' { @('Module') }
 }
 
 Write-Log -Level 'HEADER' -Message "Running Test Suite: $TestSuite"
@@ -196,7 +242,8 @@ Write-Log -Level 'HEADER' -Message "Running Test Suite: $TestSuite"
 # Execute selected tests
 foreach ($testKey in $testsToRun) {
     $test = $availableTests[$testKey]
-    $result = Invoke-TestScript -ScriptPath $test.Script -TestName $test.Name -Parameters $test.Parameters
+    $isPesterTest = $test.ContainsKey('IsPester') -and $test.IsPester
+    $result = Invoke-TestScript -ScriptPath $test.Script -TestName $test.Name -Parameters $test.Parameters -IsPester:$isPesterTest
     
     $testResults += @{
         Name = $test.Name
