@@ -1,5 +1,76 @@
 # RVTools Daily Dump Toolkit - Changelog
 
+## [3.1.1] - 2025-09-04
+
+### **🔧 Critical Bug Fixes & Improvements**
+
+**FIXED**: Resolved multiple critical issues affecting export validation, email functionality, and logging completeness.
+
+#### **Microsoft Graph Email Fixes**
+
+- **Fixed Incorrect Cmdlet**: Changed from `Send-MgUserMessage` to `Send-MgUserMail` for proper email sending
+- **Fixed Module Dependency**: Updated from `Microsoft.Graph.Mail` to `Microsoft.Graph.Users.Actions` module
+- **Fixed Email Structure**: Corrected message parameter structure for Microsoft Graph API compatibility
+- **Fixed Initialization**: Updated `Initialize-RVToolsDependencies.ps1` to install correct Microsoft Graph modules
+- **Added Email Test Script**: New `test\Test-RVToolsEmail.ps1` for standalone email functionality testing
+
+#### **Export Validation Enhancements**
+
+- **Added File Existence Check**: RVTools exports now validate that output files are actually created
+- **Enhanced Error Detection**: Detects when RVTools reports success (exit code 0) but fails to create export file
+- **Improved File Size Reporting**: Shows actual file size in success messages for verification
+- **Better Connectivity Diagnostics**: Identifies latency/connectivity issues in high-latency scenarios
+
+#### **Logging System Improvements**
+
+- **Complete Log File Coverage**: All console output now properly logged to files
+- **Added Missing LogFile Parameters**: Fixed missing LogFile parameters in private export functions
+- **Enhanced Command Logging**: Shows actual RVTools commands being executed (with redacted passwords)
+- **Fixed Write-RVToolsLog Calls**: Corrected malformed logging calls throughout the codebase
+- **Detailed Error Capture**: Enhanced error details capture for Microsoft Graph operations
+
+#### **RVTools Installation Automation**
+
+- **Added Automatic Installation**: `Initialize-RVToolsDependencies.ps1` now auto-installs RVTools via winget
+- **Added winget Detection**: Checks for winget availability before attempting installation
+- **Enhanced Path Validation**: Comprehensive RVTools executable validation with helpful error messages
+- **Graceful Fallbacks**: Provides manual installation guidance when automatic installation fails
+
+#### **Test Infrastructure**
+
+- **Organized Test Scripts**: Moved test utilities to `test\` folder following project conventions
+- **Standalone Email Testing**: New dedicated email test script with comprehensive diagnostics
+- **Path Resolution Fixes**: Corrected relative path handling for scripts in subdirectories
+
+#### **Technical Improvements**
+
+- **Fixed Function Parameters**: Added missing LogFile and ConfigLogLevel parameters to all private functions
+- **Enhanced Error Handling**: Better exception capture and detailed error reporting
+- **Module Dependencies**: Updated all module import statements to use correct Microsoft Graph modules
+- **Configuration Validation**: Enhanced Microsoft Graph module validation in initialization script
+
+#### **Files Modified**
+
+- `Initialize-RVToolsDependencies.ps1` - Enhanced RVTools installation and module dependencies
+- `RVToolsModule\Private\Send-RVToolsGraphEmail.ps1` - Fixed email functionality and logging
+- `RVToolsModule\Private\Invoke-RVToolsStandardExport.ps1` - Added file validation and detailed logging
+- `RVToolsModule\Private\Invoke-RVToolsChunkedExport.ps1` - Enhanced logging integration
+- `RVToolsModule\Private\Invoke-RVToolsSingleTabExport.ps1` - Added comprehensive logging
+- `RVToolsModule\Public\Invoke-RVToolsExport.ps1` - Updated function calls with logging parameters
+- `test\Test-RVToolsEmail.ps1` - New standalone email testing utility
+
+#### **Breaking Changes**
+
+None. All changes are backward compatible.
+
+#### **Known Issues Resolved**
+
+- ✅ Email "property 'Message' cannot be found" error
+- ✅ Missing log entries for export operations
+- ✅ False success reports when export files aren't created
+- ✅ Incomplete error reporting for Microsoft Graph operations
+- ✅ Manual RVTools installation requirement
+
 ## [3.1.0] - 2025-08-30
 
 ### **🎯 Major Feature: Single-Tab Export Capability**
@@ -66,8 +137,8 @@
 
 #### **Successfully Tested With**
 
-- **defense.local environments**: Multi-host configurations with mixed export modes
-- **helpsystems.com environments**: Large-scale production testing
+- **Enterprise Domain A**: Multi-host configurations with mixed export modes
+- **Enterprise Domain B**: Large-scale production testing
 - **Performance Benchmarks**: Confirmed 350x size reduction (9-10KB vs 350KB+ files)
 - **Connectivity Testing**: FullValidation mode working perfectly with vLicense exports
 
@@ -192,8 +263,8 @@ This enhancement demonstrates the power of the professional module architecture 
 
 - **✅ Before Fix**: RVTools CLI failed with log4net errors, no connections possible
 - **✅ After Fix**: RVTools CLI works perfectly, successful exports achieved
-- **✅ Connectivity Verified**: uppsvcenter001.helpsystems.com now exports successfully
-- **✅ Network Issues Isolated**: ddi-mvvmw1051.defense.local failures confirmed as connectivity issues, not configuration
+- **✅ Connectivity Verified**: Production vCenter exports now working successfully
+- **✅ Network Issues Isolated**: Failed hosts confirmed as connectivity issues, not configuration
 
 ### 📁 Project Organization
 

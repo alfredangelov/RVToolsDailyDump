@@ -161,10 +161,12 @@ Run the initialization script to install required modules and set up SecretManag
 This will:
 
 - Install Microsoft.PowerShell.SecretManagement and SecretStore modules
-- Install Microsoft Graph modules (if Microsoft Graph email is configured)
+- Install Microsoft.Graph.Authentication and Microsoft.Graph.Users.Actions modules (if Microsoft Graph email is configured)
+- **Automatically install RVTools via winget** (if not present and winget is available)
 - Create and configure the RVToolsVault for unattended operation
-- Validate RVTools installation
-- Create required directories
+- Validate RVTools installation and path configuration
+- Create required directories (export/, log/)
+- Provide detailed setup validation and diagnostics
 
 ### 2. Configure the Toolkit
 
@@ -252,6 +254,16 @@ Run a dry-run to validate configuration and connectivity:
 
 ```powershell
 .\RVToolsDump.ps1 -DryRun
+```
+
+**Test Email Functionality** (if configured):
+
+```powershell
+# Test Microsoft Graph email without running exports
+.\test\Test-RVToolsEmail.ps1
+
+# Test with custom recipient
+.\test\Test-RVToolsEmail.ps1 -To "test@domain.com"
 ```
 
 Then run a real export:
@@ -386,7 +398,7 @@ The **FullValidation** mode now uses the new `vLicense` single-tab export functi
 - **🧪 Enhanced Testing**: Refactored connectivity testing to use vLicense exports
 - **🔄 Smart Integration**: Seamlessly integrated with existing Normal/Chunked modes
 - **📁 Professional File Naming**: hostname-timestamp-tabname.xlsx format
-- **✅ Production Validated**: Successfully tested with defense.local and helpsystems.com environments
+- **✅ Production Validated**: Successfully tested with multiple enterprise environments
 
 ### August 2025 v3.0.0 - Professional Module Architecture
 
@@ -410,7 +422,7 @@ The **FullValidation** mode now uses the new `vLicense` single-tab export functi
 - Microsoft.PowerShell.SecretManagement module
 - Microsoft.PowerShell.SecretStore module
 - ImportExcel module (for chunked export merging - no Excel installation required)
-- Microsoft Graph modules (if using Microsoft Graph email)
+- Microsoft.Graph.Authentication and Microsoft.Graph.Users.Actions modules (if using Microsoft Graph email)
 - Windows DPAPI (for RVTools password encryption)
 
 ## Module Usage Examples
