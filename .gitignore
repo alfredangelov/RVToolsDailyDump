@@ -5,28 +5,14 @@ shared/Configuration.psd1
 shared/HostList.psd1
 
 # Attic (archived development artifacts)
+# Credential and secret files
 attic/*
 
 # Logs and debug files
 log/*
-*.log
-*.txt
-debug-*
-error-*
 
 # Data export files
 export/*
-*.csv
-*.xlsx
-*.xml
-*.json
-
-# Credential and secret files
-*.key
-*.pfx
-*.p12
-*.crt
-*.pem
 
 # Ignore cruft
 Thumbs.db
