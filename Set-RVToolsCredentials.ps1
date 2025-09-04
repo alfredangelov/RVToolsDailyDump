@@ -38,7 +38,7 @@
     .\Set-RVToolsCredentials.ps1 -ListCredentials
 
 .NOTES
-    Version: 3.1.0
+    Version: 3.2.0
     Refactored in v2.1.0: Leverages RVToolsModule functions for better code reuse and consistency.
     Enhanced in v1.3.0: Username parameter support for credential removal and improved secret name parsing.
 #>

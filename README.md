@@ -2,7 +2,7 @@
 
 A reliable, configuration-driven PowerShell toolkit for automating RVTools exports across multiple vCenter servers with secure credential management. **Now featuring granular single-tab export capability for lightweight testing and targeted data collection.**
 
-## 🚀 Version 3.1.0 - Single-Tab Export Enhancement
+## 🚀 Version 3.2.0 - Testing Infrastructure Enhancement
 
 ### **Major New Feature: Granular Export Control**
 
@@ -418,7 +418,7 @@ The **FullValidation** mode now uses the new `vLicense` single-tab export functi
 
 - PowerShell 7+ (recommended) or Windows PowerShell 5.1
 - RVTools 4.0+ installed (validated with Dell RVTools CLI standards)
-- **RVToolsModule v3.1.0** (included in this toolkit)
+- **RVToolsModule v3.2.0** (included in this toolkit)
 - Microsoft.PowerShell.SecretManagement module
 - Microsoft.PowerShell.SecretStore module
 - ImportExcel module (for chunked export merging - no Excel installation required)
@@ -473,7 +473,7 @@ RVToolsDailyDump/
 ├── Set-MicrosoftGraphCredentials.ps1     # Microsoft Graph secret management (enhanced)
 ├── Initialize-RVToolsDependencies.ps1    # Setup and validation (enhanced)
 ├── RVToolsModule/                        # Professional PowerShell module (fully utilized)
-│   ├── RVToolsModule.psd1                # Module manifest (v3.1.0)
+│   ├── RVToolsModule.psd1                # Module manifest (v3.2.0)
 │   ├── RVToolsModule.psm1                # Module loader
 │   ├── Public/                           # 10 exported functions
 │   │   ├── Invoke-RVToolsExport.ps1      # Main export cmdlet with single-tab support
@@ -516,5 +516,5 @@ RVToolsDailyDump/
 This toolkit is provided as-is for internal use. Customize as needed for your environment.
 
 **Author**: Alfred Angelov  
-**Version**: 3.1.0  
+**Version**: 3.2.0  
 **Date**: August 30, 2025

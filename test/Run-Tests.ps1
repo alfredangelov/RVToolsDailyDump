@@ -7,7 +7,7 @@
     including configuration validation, credential management, and password encryption tests.
 
 .VERSION
-    1.4.2
+    3.2.0
 
 .PARAMETER TestSuite
     Specific test suite to run. Options: All, Configuration, Credentials, Encryption, Module, ExcelMerge

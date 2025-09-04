@@ -1,5 +1,71 @@
 # RVTools Daily Dump Toolkit - Changelog
 
+## [3.2.0] - 2025-09-04
+
+### **🧪 Testing Infrastructure Enhancement**
+
+**NEW**: Added comprehensive Excel merge testing capabilities and enhanced security posture.
+
+#### **Excel Merge Test Framework**
+
+- **New Test Script**: `test\Test-RVToolsExcelMerge.ps1` - Comprehensive Excel merge functionality testing
+- **Mock Data Generation**: Realistic test data for all 26 RVTools tabs (vInfo, vCPU, vMemory, vHost, vCluster, etc.)
+- **Merge Validation**: Complete validation of `Merge-RVToolsExcelFiles` functionality
+- **vMetaData Deduplication Testing**: Ensures proper handling of duplicate vMetaData tabs
+- **Flexible Test Modes**: QuickTest (3 tabs) and Full Test (26 tabs) options
+- **Test Runner Integration**: Added ExcelMerge test suite to `Run-Tests.ps1`
+
+#### **Security & Documentation Improvements**
+
+- **Security Sanitization**: Removed company domain references from public documentation
+- **Generic Placeholders**: Replaced real environment names with safe placeholders
+- **Documentation Consistency**: Aligned all version numbers across codebase
+- **Enhanced Troubleshooting**: Added comprehensive test utilities documentation
+
+### **🔧 Technical Implementation**
+
+#### **Mock Data Functions**
+- `New-MockVMData`: Generates realistic VM configurations (15 VMs with proper attributes)
+- `New-MockHostData`: Creates ESXi host data (3 hosts with cluster assignments)
+- `New-MockClusterData`: Builds cluster configurations (HA/DRS settings)
+- `New-MockLicenseData`: vSphere licensing information
+- `New-MockMetaData`: Realistic vMetaData tabs for each export
+
+#### **Validation Framework**
+- File generation validation for all RVTools tabs
+- Merge operation success/failure detection
+- vMetaData deduplication verification
+- Data preservation validation (all worksheets and rows)
+- Comprehensive error handling and reporting
+
+### **📊 Test Coverage**
+
+| **Component** | **Status** | **Coverage** |
+|---|---|---|
+| Excel File Generation | ✅ Complete | All 26 RVTools tabs |
+| Merge Functionality | ✅ Complete | Full merge process validation |
+| vMetaData Handling | ✅ Complete | Deduplication testing |
+| Data Preservation | ✅ Complete | Worksheet and row validation |
+| Error Detection | ✅ Complete | Comprehensive failure scenarios |
+
+### **🚀 Usage Examples**
+
+```powershell
+# Quick validation test
+.\test\Test-RVToolsExcelMerge.ps1 -QuickTest
+
+# Full comprehensive test  
+.\test\Test-RVToolsExcelMerge.ps1
+
+# Test with file preservation
+.\test\Test-RVToolsExcelMerge.ps1 -KeepTestFiles
+
+# Run through test suite
+.\test\Run-Tests.ps1 -TestSuite ExcelMerge
+```
+
+---
+
 ## [3.1.1] - 2025-09-04
 
 ### **🔧 Critical Bug Fixes & Improvements**

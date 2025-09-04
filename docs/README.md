@@ -228,5 +228,5 @@ The modular architecture makes updates straightforward:
 
 **Project**: RVToolsModule  
 **Author**: Alfred Angelov
-**Final Version**: 3.1.1  
+**Final Version**: 3.2.0  
 **Documentation Updated**: September 4, 2025

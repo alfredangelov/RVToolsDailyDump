@@ -27,7 +27,7 @@
     Each tab is exported individually, reducing memory usage.
 
 .NOTES
-    Version: 3.1.0
+    Version: 3.2.0
     - Completely refactored to use RVToolsModule public functions
     - Removed ~200+ lines of duplicated code
     - Improved maintainability and error handling

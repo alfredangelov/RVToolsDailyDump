@@ -7,7 +7,7 @@
     SecretManagement vaults, and validates the environment for RVTools operations.
 
 .VERSION
-    2.0.1
+    3.2.0
 
 .PARAMETER ConfigPath
     Path to the configuration file. Defaults to shared/Configuration.psd1.

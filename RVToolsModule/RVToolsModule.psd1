@@ -3,7 +3,7 @@
     RootModule = 'RVToolsModule.psm1'
 
     # Version number of this module.
-    ModuleVersion = '3.1.0'
+    ModuleVersion = '3.2.0'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Desktop', 'Core')
@@ -106,6 +106,18 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
+3.2.0 - Testing Infrastructure Enhancement
+- Added comprehensive Excel merge test framework (Test-RVToolsExcelMerge.ps1)
+- Enhanced testing infrastructure with mock data generation for all 26 RVTools tabs
+- Integrated Excel merge testing into main test runner (Run-Tests.ps1)
+- Security improvements: sanitized company domain references in documentation
+- Comprehensive validation of Merge-RVToolsExcelFiles functionality
+- Mock data generation for realistic testing scenarios (VMs, hosts, clusters, licenses)
+- Flexible test modes: QuickTest (3 tabs) and Full Test (26 tabs)
+- vMetaData deduplication testing and validation framework
+- Enhanced troubleshooting documentation with test utilities
+- Production-ready testing infrastructure for Excel merge operations
+
 3.1.0 - Single-Tab Export Enhancement
 - Added granular single-tab export capability (e.g., 'vLicense', 'vInfo', 'vHost')
 - Enhanced Invoke-RVToolsExport to support tab names as ExportMode parameter
