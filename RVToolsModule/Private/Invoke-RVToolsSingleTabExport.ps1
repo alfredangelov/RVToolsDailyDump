@@ -67,7 +67,13 @@ function Invoke-RVToolsSingleTabExport {
         [string[]]$ExtraArgs = @(),
         
         [Parameter()]
-        [switch]$DryRun
+        [switch]$DryRun,
+        
+        [Parameter()]
+        [string]$LogFile,
+        
+        [Parameter()]
+        [string]$ConfigLogLevel = 'INFO'
     )
     
     # Get tab definitions to find the correct command

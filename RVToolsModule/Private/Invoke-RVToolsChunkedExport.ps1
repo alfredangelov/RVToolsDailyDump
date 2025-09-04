@@ -61,10 +61,16 @@ function Invoke-RVToolsChunkedExport {
         [string[]]$ExtraArgs = @(),
         
         [Parameter()]
-        [switch]$DryRun
+        [switch]$DryRun,
+        
+        [Parameter()]
+        [string]$LogFile,
+        
+        [Parameter()]
+        [string]$ConfigLogLevel = 'INFO'
     )
     
-    Write-RVToolsLog -Message "Starting chunked export for $HostName" -Level 'INFO'
+    Write-RVToolsLog -Message "Starting chunked export for $HostName" -Level 'INFO -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
     
     $finalExportFile = Join-Path $ExportDirectory "$BaseFileName.xlsx"
     $tempFiles = @()
@@ -99,7 +105,7 @@ function Invoke-RVToolsChunkedExport {
         try {
             if ($PSCmdlet.ShouldProcess($HostName, "Export $($tab.FileName) tab")) {
                 if (-not $DryRun) {
-                    Write-RVToolsLog -Message "Exporting $($tab.FileName) tab for $HostName" -Level 'DEBUG'
+                    Write-RVToolsLog -Message "Exporting $($tab.FileName) tab for $HostName" -Level 'DEBUG -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
                     
                     # Change to RVTools directory
                     $originalLocation = Get-Location
@@ -110,19 +116,19 @@ function Invoke-RVToolsChunkedExport {
                         $code = $process.ExitCode
                         
                         if ($code -eq 0) {
-                            Write-RVToolsLog -Message "Successfully exported $($tab.FileName) tab for $HostName" -Level 'DEBUG'
+                            Write-RVToolsLog -Message "Successfully exported $($tab.FileName) tab for $HostName" -Level 'DEBUG -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
                             if (Test-Path $tabFile) {
                                 $tempFiles += $tabFile
                                 $successfulTabs += $tab.FileName
                             }
                         } elseif ($code -eq -1) {
-                            Write-RVToolsLog -Message "Failed to export $($tab.FileName) tab for $HostName (connection failed)" -Level 'WARN'
+                            Write-RVToolsLog -Message "Failed to export $($tab.FileName) tab for $HostName (connection failed)" -Level 'WARN -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
                             $failedTabs += "$($tab.FileName) (connection failed)"
                         } elseif ($code -eq -1073741819) {
-                            Write-RVToolsLog -Message "Failed to export $($tab.FileName) tab for $HostName (crash/memory issue)" -Level 'WARN'
+                            Write-RVToolsLog -Message "Failed to export $($tab.FileName) tab for $HostName (crash/memory issue)" -Level 'WARN -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
                             $failedTabs += "$($tab.FileName) (crash)"
                         } else {
-                            Write-RVToolsLog -Message "Failed to export $($tab.FileName) tab for $HostName (exit code $code)" -Level 'WARN'
+                            Write-RVToolsLog -Message "Failed to export $($tab.FileName) tab for $HostName (exit code $code)" -Level 'WARN -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
                             $failedTabs += "$($tab.FileName) (exit $code)"
                         }
                     } finally {
@@ -135,7 +141,7 @@ function Invoke-RVToolsChunkedExport {
                 }
             }
         } catch {
-            Write-RVToolsLog -Message "Exception while exporting $($tab.FileName) tab for ${HostName}: $($_.Exception.Message)" -Level 'ERROR'
+            Write-RVToolsLog -Message "Exception while exporting $($tab.FileName) tab for ${HostName}: $($_.Exception.Message)" -Level 'ERROR -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
             $failedTabs += "$($tab.FileName) (exception)"
         }
     }
@@ -153,7 +159,7 @@ function Invoke-RVToolsChunkedExport {
             $existingTempFiles = $tempFiles | Where-Object { Test-Path $_ }
             
             if ($existingTempFiles.Count -gt 0) {
-                Write-RVToolsLog -Message "Found $($existingTempFiles.Count) successful tab exports out of $($tempFiles.Count) attempted" -Level 'INFO'
+                Write-RVToolsLog -Message "Found $($existingTempFiles.Count) successful tab exports out of $($tempFiles.Count) attempted" -Level 'INFO -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
                 $mergeSucceeded = Merge-RVToolsExcelFiles -SourceFiles $existingTempFiles -DestinationFile $finalExportFile
                 
                 if ($mergeSucceeded) {
@@ -164,9 +170,9 @@ function Invoke-RVToolsChunkedExport {
                         if ($tabFileToClean.FullName -ne $finalExportFile) {
                             try {
                                 Remove-Item $tabFileToClean.FullName -Force
-                                Write-RVToolsLog -Message "Cleaned up tab file: $($tabFileToClean.Name)" -Level 'DEBUG'
+                                Write-RVToolsLog -Message "Cleaned up tab file: $($tabFileToClean.Name)" -Level 'DEBUG -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
                             } catch {
-                                Write-RVToolsLog -Message "Failed to remove tab file $($tabFileToClean.Name): $($_.Exception.Message)" -Level 'WARN'
+                                Write-RVToolsLog -Message "Failed to remove tab file $($tabFileToClean.Name): $($_.Exception.Message)" -Level 'WARN -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
                             }
                         }
                     }

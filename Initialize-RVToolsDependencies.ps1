@@ -157,22 +157,60 @@ function Test-RVToolsPath {
         return $true
     } else {
         Write-Log -Level 'WARN' -Message "RVTools executable not found at: $RVToolsPath"
-        Write-Log -Level 'INFO' -Message "Please install RVTools or update the RVToolsPath in configuration"
-        return $false
+        
+        # Check if winget is available and offer to install RVTools
+        Write-Log -Level 'INFO' -Message "Checking if winget is available for automatic installation..."
+        
+        try {
+            $wingetVersion = & winget --version 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Log -Level 'SUCCESS' -Message "winget found (version: $wingetVersion)"
+                Write-Log -Level 'INFO' -Message "Attempting to install RVTools via winget..."
+                
+                $installResult = & winget install rvtools --accept-package-agreements --accept-source-agreements 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Log -Level 'SUCCESS' -Message "RVTools installation completed successfully"
+                    Write-Log -Level 'INFO' -Message "Installation output: $($installResult -join '; ')"
+                    
+                    # Check if RVTools is now available at the expected path
+                    if (Test-Path -LiteralPath $RVToolsPath) {
+                        Write-Log -Level 'SUCCESS' -Message "RVTools executable now found at: $RVToolsPath"
+                        return $true
+                    } else {
+                        Write-Log -Level 'WARN' -Message "RVTools was installed but not found at expected path: $RVToolsPath"
+                        Write-Log -Level 'INFO' -Message "You may need to update the RVToolsPath in your configuration file"
+                        return $false
+                    }
+                } else {
+                    Write-Log -Level 'ERROR' -Message "Failed to install RVTools via winget. Exit code: $LASTEXITCODE"
+                    Write-Log -Level 'INFO' -Message "Error output: $($installResult -join '; ')"
+                    Write-Log -Level 'INFO' -Message "Please install RVTools manually or update the RVToolsPath in configuration"
+                    return $false
+                }
+            } else {
+                Write-Log -Level 'WARN' -Message "winget is not available or not working properly"
+                Write-Log -Level 'INFO' -Message "Please install RVTools manually from https://www.robware.net/rvtools/ or update the RVToolsPath in configuration"
+                return $false
+            }
+        } catch {
+            Write-Log -Level 'WARN' -Message "Error checking winget availability: $($_.Exception.Message)"
+            Write-Log -Level 'INFO' -Message "Please install RVTools manually from https://www.robware.net/rvtools/ or update the RVToolsPath in configuration"
+            return $false
+        }
     }
 }
 
 function Test-MicrosoftGraphModules {
     $authModule = Test-ModuleAvailable -ModuleName 'Microsoft.Graph.Authentication'
-    $mailModule = Test-ModuleAvailable -ModuleName 'Microsoft.Graph.Mail'
+    $usersActionsModule = Test-ModuleAvailable -ModuleName 'Microsoft.Graph.Users.Actions'
     
-    if ($authModule -and $mailModule) {
-        Write-Log -Level 'SUCCESS' -Message "Microsoft Graph modules available (Authentication + Mail)"
+    if ($authModule -and $usersActionsModule) {
+        Write-Log -Level 'SUCCESS' -Message "Microsoft Graph modules available (Authentication + Users.Actions)"
         return $true
     } else {
         $missing = @()
         if (-not $authModule) { $missing += 'Microsoft.Graph.Authentication' }
-        if (-not $mailModule) { $missing += 'Microsoft.Graph.Mail' }
+        if (-not $usersActionsModule) { $missing += 'Microsoft.Graph.Users.Actions' }
         Write-Log -Level 'INFO' -Message "Microsoft Graph modules missing: $($missing -join ', ') (required for Microsoft Graph email)"
         return $false
     }
@@ -211,7 +249,7 @@ $requiredModules = @(
 # Microsoft Graph modules for email functionality
 if ($cfg.Email?.Enabled -and $cfg.Email?.Method -eq 'MicrosoftGraph') {
     $requiredModules += @{ Name = 'Microsoft.Graph.Authentication'; MinimumVersion = '1.19.0' }
-    $requiredModules += @{ Name = 'Microsoft.Graph.Mail'; MinimumVersion = '1.19.0' }
+    $requiredModules += @{ Name = 'Microsoft.Graph.Users.Actions'; MinimumVersion = '1.19.0' }
 }
 
 # Install required modules

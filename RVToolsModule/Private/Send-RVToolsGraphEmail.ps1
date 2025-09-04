@@ -67,7 +67,13 @@ function Send-RVToolsGraphEmail {
         [string]$Subject,
         
         [Parameter(Mandatory)]
-        [string]$Body
+        [string]$Body,
+        
+        [Parameter()]
+        [string]$LogFile,
+        
+        [Parameter()]
+        [string]$ConfigLogLevel = 'INFO'
     )
     
     try {
@@ -75,22 +81,22 @@ function Send-RVToolsGraphEmail {
         if ($ClientSecretName -and -not $ClientSecret) {
             try {
                 $ClientSecret = Get-Secret -Name $ClientSecretName -Vault $VaultName -AsPlainText -ErrorAction Stop
-                Write-RVToolsLog -Message "Retrieved ClientSecret from vault: $ClientSecretName" -Level 'DEBUG'
+                Write-RVToolsLog -Message "Retrieved ClientSecret from vault: $ClientSecretName" -Level 'DEBUG' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
             } catch {
-                Write-RVToolsLog -Message "Failed to retrieve ClientSecret from vault '$VaultName' with name '$ClientSecretName': $($_.Exception.Message)" -Level 'ERROR'
+                Write-RVToolsLog -Message "Failed to retrieve ClientSecret from vault '$VaultName' with name '$ClientSecretName': $($_.Exception.Message)" -Level 'ERROR' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
                 return $false
             }
         }
         
         # Validate that we have a ClientSecret
         if ([string]::IsNullOrWhiteSpace($ClientSecret)) {
-            Write-RVToolsLog -Message "ClientSecret is required but not provided or retrieved from vault" -Level 'ERROR'
+            Write-RVToolsLog -Message "ClientSecret is required but not provided or retrieved from vault" -Level 'ERROR' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
             return $false
         }
         
         # Import required modules
         Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
-        Import-Module Microsoft.Graph.Mail -ErrorAction Stop
+        Import-Module Microsoft.Graph.Users.Actions -ErrorAction Stop
         
         # Create client secret credential
         $SecureSecret = ConvertTo-SecureString $ClientSecret -AsPlainText -Force
@@ -99,38 +105,43 @@ function Send-RVToolsGraphEmail {
         # Connect to Microsoft Graph
         Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $ClientSecretCredential -NoWelcome
         
-        # Create the email message
-        $BodyObject = @{
-            ContentType = "Text"
-            Content = $Body
-        }
-        
+        # Create the email message structure for Send-MgUserMail
         $ToRecipients = @()
         foreach ($recipient in $To) {
             $ToRecipients += @{
-                EmailAddress = @{
-                    Address = $recipient
+                emailAddress = @{
+                    address = $recipient
                 }
             }
         }
-        
-        $Message = @{
-            Subject = $Subject
-            Body = $BodyObject
-            ToRecipients = $ToRecipients
+
+        $MailParams = @{
+            message = @{
+                subject = $Subject
+                body = @{
+                    contentType = "Text"
+                    content = $Body
+                }
+                toRecipients = $ToRecipients
+            }
+            saveToSentItems = $true
         }
         
         # Send the email
-        Send-MgUserMail -UserId $From -Message $Message
+        Send-MgUserMail -UserId $From -BodyParameter $MailParams
         
         # Disconnect from Microsoft Graph
         Disconnect-MgGraph | Out-Null
         
-        Write-RVToolsLog -Message "Successfully sent Microsoft Graph email to $($To -join ', ')" -Level 'SUCCESS'
+        Write-RVToolsLog -Message "Successfully sent Microsoft Graph email to $($To -join ', ')" -Level 'SUCCESS' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
         return $true
         
     } catch {
-        Write-RVToolsLog -Message "Microsoft Graph email error: $($_.Exception.Message)" -Level 'ERROR'
+        $errorDetails = $_.Exception.Message
+        if ($_.ErrorDetails.Message) {
+            $errorDetails += " Details: $($_.ErrorDetails.Message)"
+        }
+        Write-RVToolsLog -Message "Microsoft Graph email error: $errorDetails" -Level 'ERROR' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
         try { Disconnect-MgGraph | Out-Null } catch { }
         return $false
     }

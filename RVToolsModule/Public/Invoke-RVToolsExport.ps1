@@ -342,7 +342,7 @@ function Invoke-RVToolsExport {
 
         if ($useSingleTabExport) {
             # Single-tab export mode
-            $result = Invoke-RVToolsSingleTabExport -HostName $name -Credential $cred -RVToolsPath $rvtoolsPath -ExportDirectory $exportsRoot -TabName $serverExportMode -BaseFileName $baseFileName -UsePasswordEncryption:$usePasswordEncryption -ExtraArgs $extraArgs -DryRun:$DryRun
+            $result = Invoke-RVToolsSingleTabExport -HostName $name -Credential $cred -RVToolsPath $rvtoolsPath -ExportDirectory $exportsRoot -TabName $serverExportMode -BaseFileName $baseFileName -UsePasswordEncryption:$usePasswordEncryption -ExtraArgs $extraArgs -DryRun:$DryRun -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
             
             if ($result) {
                 $results += $result
@@ -357,7 +357,7 @@ function Invoke-RVToolsExport {
             }
         } elseif ($useChunkedExport) {
             # Chunked export mode
-            $result = Invoke-RVToolsChunkedExport -HostName $name -Credential $cred -RVToolsPath $rvtoolsPath -ExportDirectory $exportsRoot -BaseFileName $baseFileName -UsePasswordEncryption:$usePasswordEncryption -ExtraArgs $extraArgs -DryRun:$DryRun
+            $result = Invoke-RVToolsChunkedExport -HostName $name -Credential $cred -RVToolsPath $rvtoolsPath -ExportDirectory $exportsRoot -BaseFileName $baseFileName -UsePasswordEncryption:$usePasswordEncryption -ExtraArgs $extraArgs -DryRun:$DryRun -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
             
             if ($result) {
                 $results += $result
@@ -376,7 +376,7 @@ function Invoke-RVToolsExport {
             }
         } else {
             # Standard export mode
-            $result = Invoke-RVToolsStandardExport -HostName $name -Credential $cred -RVToolsPath $rvtoolsPath -ExportDirectory $exportsRoot -ExportFileName $exportFileName -UsePasswordEncryption:$usePasswordEncryption -ExtraArgs $extraArgs -DryRun:$DryRun
+            $result = Invoke-RVToolsStandardExport -HostName $name -Credential $cred -RVToolsPath $rvtoolsPath -ExportDirectory $exportsRoot -ExportFileName $exportFileName -UsePasswordEncryption:$usePasswordEncryption -ExtraArgs $extraArgs -DryRun:$DryRun -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
             
             if ($result) {
                 $results += $result
@@ -426,6 +426,9 @@ function Invoke-RVToolsExport {
                         $graphParams.ClientSecretName = $emailCfg['ClientSecretName']
                         $graphParams.VaultName = $cfg.Auth.DefaultVault ?? 'RVToolsVault'
                     }
+                    
+                    $graphParams.LogFile = $script:LogFile
+                    $graphParams.ConfigLogLevel = $script:ConfigLogLevel
                     
                     $success = Send-RVToolsGraphEmail @graphParams
                     if ($success) {

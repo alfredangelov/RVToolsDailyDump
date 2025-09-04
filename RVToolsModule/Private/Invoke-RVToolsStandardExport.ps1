@@ -61,7 +61,13 @@ function Invoke-RVToolsStandardExport {
         [string[]]$ExtraArgs = @(),
         
         [Parameter()]
-        [switch]$DryRun
+        [switch]$DryRun,
+        
+        [Parameter()]
+        [string]$LogFile,
+        
+        [Parameter()]
+        [string]$ConfigLogLevel = 'INFO'
     )
     
     $exportFile = Join-Path $ExportDirectory $ExportFileName
@@ -88,28 +94,47 @@ function Invoke-RVToolsStandardExport {
     try {
         if ($PSCmdlet.ShouldProcess($HostName, 'Run RVTools export')) {
             if (-not $DryRun) {
-                Write-RVToolsLog -Message "Starting RVTools export for $HostName to $exportFile" -Level 'INFO'
+                Write-RVToolsLog -Message "Starting RVTools export for $HostName to $exportFile" -Level 'INFO' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
                 
                 # Change to RVTools directory (as recommended by Dell)
                 $originalLocation = Get-Location
                 Set-Location (Split-Path $RVToolsPath -Parent)
                 
                 try {
+                    # Log the command being executed (with password redacted)
+                    $logArgs = $rvToolsArgs -replace $passwordArg, '<redacted>'
+                    Write-RVToolsLog -Message "Executing: $RVToolsPath $($logArgs -join ' ')" -Level 'INFO' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
+                    
                     # Use Start-Process as recommended by Dell's official script
                     $process = Start-Process -FilePath $RVToolsPath -ArgumentList $rvToolsArgs -NoNewWindow -Wait -PassThru
                     $code = $process.ExitCode
                     
+                    Write-RVToolsLog -Message "RVTools process completed with exit code: $code" -Level 'INFO' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
+                    
                     if ($code -eq 0) {
-                        Write-RVToolsLog -Message "Completed export for $HostName" -Level 'SUCCESS'
-                        return [pscustomobject]@{
-                            HostName = $HostName
-                            Success = $true
-                            ExportFile = $exportFile
-                            ExitCode = $code
-                            Message = "SUCCESS"
+                        # Verify that the export file was actually created
+                        if (Test-Path -LiteralPath $exportFile) {
+                            $fileInfo = Get-Item -LiteralPath $exportFile
+                            Write-RVToolsLog -Message "Completed export for $HostName (file size: $($fileInfo.Length) bytes)" -Level 'SUCCESS' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
+                            return [pscustomobject]@{
+                                HostName = $HostName
+                                Success = $true
+                                ExportFile = $exportFile
+                                ExitCode = $code
+                                Message = "SUCCESS"
+                            }
+                        } else {
+                            Write-RVToolsLog -Message "RVTools reported success but export file was not created: $exportFile" -Level 'ERROR' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
+                            return [pscustomobject]@{
+                                HostName = $HostName
+                                Success = $false
+                                ExportFile = $null
+                                ExitCode = $code
+                                Message = "EXPORT FILE NOT CREATED"
+                            }
                         }
                     } elseif ($code -eq -1) {
-                        Write-RVToolsLog -Message "RVTools connection failed for $HostName (exit code -1)" -Level 'ERROR'
+                        Write-RVToolsLog -Message "RVTools connection failed for $HostName (exit code -1)" -Level 'ERROR' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
                         return [pscustomobject]@{
                             HostName = $HostName
                             Success = $false
@@ -118,7 +143,7 @@ function Invoke-RVToolsStandardExport {
                             Message = "CONNECTION FAILED"
                         }
                     } else {
-                        Write-RVToolsLog -Message "RVTools exit code $code for $HostName" -Level 'ERROR'
+                        Write-RVToolsLog -Message "RVTools exit code $code for $HostName" -Level 'ERROR' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
                         return [pscustomobject]@{
                             HostName = $HostName
                             Success = $false
@@ -132,7 +157,7 @@ function Invoke-RVToolsStandardExport {
                     Set-Location $originalLocation
                 }
             } else {
-                Write-RVToolsLog -Message "[Dry-Run] Would run: $RVToolsPath $($rvToolsArgs -join ' ')" -Level 'INFO'
+                Write-RVToolsLog -Message "[Dry-Run] Would run: $RVToolsPath $($rvToolsArgs -join ' ')" -Level 'INFO' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
                 return [pscustomobject]@{
                     HostName = $HostName
                     Success = $true
@@ -153,7 +178,7 @@ function Invoke-RVToolsStandardExport {
         }
     } catch {
         $err = $_
-        Write-RVToolsLog -Message "Exception while exporting ${HostName}: $($err.Exception.Message)" -Level 'ERROR'
+        Write-RVToolsLog -Message "Exception while exporting ${HostName}: $($err.Exception.Message)" -Level 'ERROR' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
         return [pscustomobject]@{
             HostName = $HostName
             Success = $false

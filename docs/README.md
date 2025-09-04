@@ -212,6 +212,9 @@ Get-Help Invoke-RVToolsExport
 - Use `Invoke-RVToolsExport -DryRun -Verbose` for detailed diagnostics
 - Check log files in the `logs/` directory
 - Run test suite to validate installation: `.\test\Run-Tests.ps1`
+- Test email functionality separately: `.\test\Test-RVToolsEmail.ps1`
+- Validate credentials: `.\test\Test-Credentials.ps1`
+- Check system connectivity: `.\test\Test-RVToolsConnectivity.ps1`
 
 ### Updates and Enhancements
 
@@ -225,5 +228,5 @@ The modular architecture makes updates straightforward:
 
 **Project**: RVToolsModule  
 **Author**: Alfred Angelov
-**Final Version**: 3.0.0  
-**Documentation Updated**: August 30, 2025
+**Final Version**: 3.1.1  
+**Documentation Updated**: September 4, 2025
