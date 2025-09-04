@@ -10,7 +10,7 @@
     1.4.2
 
 .PARAMETER TestSuite
-    Specific test suite to run. Options: All, Configuration, Credentials, Encryption, Module
+    Specific test suite to run. Options: All, Configuration, Credentials, Encryption, Module, ExcelMerge
 
 .PARAMETER NoCleanup
     Skip cleanup operations (preserve test vaults, files, etc.)
@@ -25,13 +25,16 @@
     .\Run-Tests.ps1 -TestSuite Module
 
 .EXAMPLE
+    .\Run-Tests.ps1 -TestSuite ExcelMerge
+
+.EXAMPLE
     .\Run-Tests.ps1 -Verbose -NoCleanup
 #>
 
 [CmdletBinding()]
 param(
     [Parameter()] 
-    [ValidateSet('All', 'Configuration', 'Credentials', 'Encryption', 'Module')]
+    [ValidateSet('All', 'Configuration', 'Credentials', 'Encryption', 'Module', 'ExcelMerge')]
     [string] $TestSuite = 'All',
     
     [Parameter()] [switch] $NoCleanup
@@ -226,6 +229,13 @@ $availableTests = @{
         Parameters = @{}
         IsPester = $true
     }
+    'ExcelMerge' = @{
+        Script = Join-Path $testDirectory 'Test-RVToolsExcelMerge.ps1'
+        Name = 'Excel Merge Functionality Tests'
+        Parameters = @{
+            QuickTest = $true
+        }
+    }
 }
 
 # Determine which tests to run
@@ -235,6 +245,7 @@ $testsToRun = switch ($TestSuite) {
     'Credentials' { @('Credentials') }
     'Encryption' { @('Encryption') }
     'Module' { @('Module') }
+    'ExcelMerge' { @('ExcelMerge') }
 }
 
 Write-Log -Level 'HEADER' -Message "Running Test Suite: $TestSuite"
