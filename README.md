@@ -17,7 +17,10 @@ A reliable, configuration-driven PowerShell toolkit for automating RVTools expor
 
 ### **How Single-Tab Exports Work**
 
-Simply specify any valid RVTools tab name as the `ExportMode`:
+Simply specify any valid RVTools tab name as the `ExportMode` either:
+
+- **Command-line**: `.\RVToolsDump.ps1 -ExportMode "vHealth"` (applies to all hosts)
+- **Per-host configuration**: In HostList.psd1 (individual host control)
 
 ```powershell
 # HostList.psd1 configuration examples
@@ -45,11 +48,16 @@ Simply specify any valid RVTools tab name as the `ExportMode`:
 # Standard export (existing behavior)
 .\RVToolsDump.ps1
 
+# Command-line single-tab exports (overrides HostList configuration)
+.\RVToolsDump.ps1 -ExportMode "vHealth"        # Health checks for all hosts
+.\RVToolsDump.ps1 -ExportMode "vLicense"       # License auditing for all hosts
+.\RVToolsDump.ps1 -ExportMode "vInfo"          # Basic VM info for all hosts
+
 # All exports configured per host in HostList.psd1
 .\RVToolsDump.ps1
 
 # Test single-tab functionality
-.\RVToolsDump.ps1 -DryRun
+.\RVToolsDump.ps1 -ExportMode "vInfo" -DryRun
 ```
 
 ### **Use Cases for Single-Tab Exports**

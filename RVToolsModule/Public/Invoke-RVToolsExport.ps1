@@ -216,7 +216,8 @@ function Invoke-RVToolsExport {
             Import-Module Microsoft.PowerShell.SecretManagement -ErrorAction Stop
             Write-Verbose "SecretManagement module loaded successfully"
         }
-    } catch {
+    }
+    catch {
         Write-Warning "SecretManagement module not available. Falling back to prompt authentication."
     }
 
@@ -230,9 +231,9 @@ function Invoke-RVToolsExport {
     $script:ConfigLogLevel = $cfg.Logging?.LogLevel ?? 'INFO'
 
     # Resolve paths
-    $rvtoolsPath  = Resolve-RVToolsPath -Path ($cfg.RVToolsPath) -ScriptRoot (Split-Path $PSScriptRoot -Parent)
-    $exportsRoot  = Resolve-RVToolsPath -Path (($cfg.ExportFolder) ?? 'exports') -ScriptRoot (Split-Path $PSScriptRoot -Parent)
-    $logsRoot     = Resolve-RVToolsPath -Path (($cfg.LogsFolder) ?? 'logs') -ScriptRoot (Split-Path $PSScriptRoot -Parent)
+    $rvtoolsPath = Resolve-RVToolsPath -Path ($cfg.RVToolsPath) -ScriptRoot (Split-Path $PSScriptRoot -Parent)
+    $exportsRoot = Resolve-RVToolsPath -Path (($cfg.ExportFolder) ?? 'exports') -ScriptRoot (Split-Path $PSScriptRoot -Parent)
+    $logsRoot = Resolve-RVToolsPath -Path (($cfg.LogsFolder) ?? 'logs') -ScriptRoot (Split-Path $PSScriptRoot -Parent)
 
     New-RVToolsDirectory -Path $exportsRoot | Out-Null
     New-RVToolsDirectory -Path $logsRoot | Out-Null
@@ -243,7 +244,8 @@ function Invoke-RVToolsExport {
         if (-not (Test-Path -LiteralPath $rvtoolsPath)) {
             throw "RVTools executable not found at '$rvtoolsPath'. Update RVToolsPath in the configuration."
         }
-    } else {
+    }
+    else {
         Write-RVToolsLog -Level 'WARN' -Message "Dry-run mode: RVTools path check skipped." -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
     }
 
@@ -251,11 +253,12 @@ function Invoke-RVToolsExport {
     if ($HostName) {
         # Single server mode
         $servers = @([pscustomobject]@{ 
-            Name = $HostName
-            Username = $Username ?? $cfg.Auth?.Username
-            ExportMode = $ExportMode
-        })
-    } else {
+                Name       = $HostName
+                Username   = $Username ?? $cfg.Auth?.Username
+                ExportMode = $ExportMode
+            })
+    }
+    else {
         # Multi-server mode from host list
         $hostItems = $configResult.HostList?.Hosts
         if (-not $hostItems) { 
@@ -265,11 +268,21 @@ function Invoke-RVToolsExport {
         # Normalize host entries
         $servers = @(
             foreach ($item in $hostItems) {
+                $hostExportMode = switch ($item.GetType().Name) {
+                    'String' { 'Normal' }
+                    'Hashtable' { if ($item.ContainsKey('ExportMode')) { $item.ExportMode } else { 'Normal' } }
+                    'PSCustomObject' { if ($item.PSObject.Properties['ExportMode']) { $item.ExportMode } else { 'Normal' } }
+                    default { Write-Warning "Unsupported host list entry type: $($item.GetType().FullName)"; continue }
+                }
+                
+                # Override with command-line ExportMode if it's not the default
+                $finalExportMode = if ($ExportMode -ne 'Normal') { $ExportMode } else { $hostExportMode }
+                
                 switch ($item.GetType().Name) {
-                    'String'      { [pscustomobject]@{ Name = $item; Username = $null; ExportMode = 'Normal' } }
-                    'Hashtable'   { [pscustomobject]@{ Name = $item.Name; Username = $item.Username; ExportMode = if ($item.ContainsKey('ExportMode')) { $item.ExportMode } else { 'Normal' } } }
-                    'PSCustomObject' { [pscustomobject]@{ Name = $item.Name; Username = $item.Username; ExportMode = if ($item.PSObject.Properties['ExportMode']) { $item.ExportMode } else { 'Normal' } } }
-                    default       { Write-Warning "Unsupported host list entry type: $($item.GetType().FullName)"; continue }
+                    'String' { [pscustomobject]@{ Name = $item; Username = $null; ExportMode = $finalExportMode } }
+                    'Hashtable' { [pscustomobject]@{ Name = $item.Name; Username = $item.Username; ExportMode = $finalExportMode } }
+                    'PSCustomObject' { [pscustomobject]@{ Name = $item.Name; Username = $item.Username; ExportMode = $finalExportMode } }
+                    default { continue }
                 }
             }
         ) | Where-Object { $_.Name }
@@ -352,13 +365,16 @@ function Invoke-RVToolsExport {
                 
                 if ($result.Success) {
                     Write-RVToolsLog -Level 'SUCCESS' -Message $result.Message -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
-                } else {
+                }
+                else {
                     Write-RVToolsLog -Level 'ERROR' -Message $result.Message -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
                 }
-            } else {
+            }
+            else {
                 Write-RVToolsLog -Level 'ERROR' -Message "No result returned from single-tab export for $name" -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
             }
-        } elseif ($useChunkedExport) {
+        }
+        elseif ($useChunkedExport) {
             # Chunked export mode
             $result = Invoke-RVToolsChunkedExport -HostName $name -Credential $cred -RVToolsPath $rvtoolsPath -ExportDirectory $exportsRoot -BaseFileName $baseFileName -UsePasswordEncryption:$usePasswordEncryption -ExtraArgs $extraArgs -DryRun:$DryRun -TestMode:$TestMode -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
             
@@ -368,16 +384,20 @@ function Invoke-RVToolsExport {
                 if ($result.Success) {
                     if ($result.FailedTabs -eq 0) {
                         Write-RVToolsLog -Level 'SUCCESS' -Message $result.Message -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
-                    } else {
+                    }
+                    else {
                         Write-RVToolsLog -Level 'SUCCESS' -Message $result.Message -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
                     }
-                } else {
+                }
+                else {
                     Write-RVToolsLog -Level 'ERROR' -Message $result.Message -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
                 }
-            } else {
+            }
+            else {
                 Write-RVToolsLog -Level 'ERROR' -Message "No result returned from chunked export for $name" -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
             }
-        } else {
+        }
+        else {
             # Standard export mode
             $result = Invoke-RVToolsStandardExport -HostName $name -Credential $cred -RVToolsPath $rvtoolsPath -ExportDirectory $exportsRoot -ExportFileName $exportFileName -UsePasswordEncryption:$usePasswordEncryption -ExtraArgs $extraArgs -DryRun:$DryRun -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
             
@@ -386,10 +406,12 @@ function Invoke-RVToolsExport {
                 
                 if ($result.Success) {
                     Write-RVToolsLog -Level 'SUCCESS' -Message $result.Message -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
-                } else {
+                }
+                else {
                     Write-RVToolsLog -Level 'ERROR' -Message $result.Message -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
                 }
-            } else {
+            }
+            else {
                 Write-RVToolsLog -Level 'ERROR' -Message "No result returned from standard export for $name" -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
             }
         }
@@ -409,23 +431,26 @@ function Invoke-RVToolsExport {
                 # Microsoft Graph email method
                 if (-not $emailCfg.TenantId -or -not $emailCfg.ClientId) {
                     Write-RVToolsLog -Level 'ERROR' -Message "Microsoft Graph email requires TenantId and ClientId in configuration." -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
-                } elseif ([string]::IsNullOrWhiteSpace($emailCfg['ClientSecret']) -and [string]::IsNullOrWhiteSpace($emailCfg['ClientSecretName'])) {
+                }
+                elseif ([string]::IsNullOrWhiteSpace($emailCfg['ClientSecret']) -and [string]::IsNullOrWhiteSpace($emailCfg['ClientSecretName'])) {
                     Write-RVToolsLog -Level 'ERROR' -Message "Microsoft Graph email requires either ClientSecret or ClientSecretName in configuration." -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
-                } else {
+                }
+                else {
                     # Prepare parameters for Microsoft Graph email
                     $graphParams = @{
                         TenantId = $emailCfg.TenantId
                         ClientId = $emailCfg.ClientId
-                        From = $emailCfg.From
-                        To = $emailCfg.To
-                        Subject = $subject
-                        Body = $body
+                        From     = $emailCfg.From
+                        To       = $emailCfg.To
+                        Subject  = $subject
+                        Body     = $body
                     }
                     
                     # Add ClientSecret or ClientSecretName
                     if (-not [string]::IsNullOrWhiteSpace($emailCfg['ClientSecret'])) {
                         $graphParams.ClientSecret = $emailCfg['ClientSecret']
-                    } elseif (-not [string]::IsNullOrWhiteSpace($emailCfg['ClientSecretName'])) {
+                    }
+                    elseif (-not [string]::IsNullOrWhiteSpace($emailCfg['ClientSecretName'])) {
                         $graphParams.ClientSecretName = $emailCfg['ClientSecretName']
                         $graphParams.VaultName = $cfg.Auth.DefaultVault ?? 'RVToolsVault'
                     }
@@ -436,16 +461,19 @@ function Invoke-RVToolsExport {
                     $success = Send-RVToolsGraphEmail @graphParams
                     if ($success) {
                         Write-RVToolsLog -Level 'SUCCESS' -Message "Summary email sent via Microsoft Graph to $($emailCfg.To -join ', ')" -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
-                    } else {
+                    }
+                    else {
                         Write-RVToolsLog -Level 'ERROR' -Message "Failed to send email via Microsoft Graph (see previous error)" -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
                     }
                 }
-            } else {
+            }
+            else {
                 # Traditional SMTP method
                 $canEmail = $null -ne (Get-Command -Name Send-MailMessage -ErrorAction SilentlyContinue)
                 if (-not $canEmail) {
                     Write-RVToolsLog -Level 'WARN' -Message "Send-MailMessage not available. Skipping email." -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
-                } else {
+                }
+                else {
                     $params = @{
                         From       = $emailCfg.From
                         To         = $emailCfg.To -join ','
@@ -459,11 +487,13 @@ function Invoke-RVToolsExport {
                     Write-RVToolsLog -Level 'SUCCESS' -Message "Summary email sent via SMTP to $($emailCfg.To -join ', ')" -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
                 }
             }
-        } catch {
+        }
+        catch {
             $err = $_
             Write-RVToolsLog -Level 'ERROR' -Message "Failed to send email: $($err.Exception.Message)" -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
         }
-    } else {
+    }
+    else {
         Write-RVToolsLog -Message "Email disabled or suppressed." -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
     }
 
@@ -474,14 +504,17 @@ function Invoke-RVToolsExport {
                 # Chunked export result
                 if ($_.FailedTabs -eq 0) {
                     "SUCCESS (CHUNKED) - $($_.HostName)"
-                } else {
+                }
+                else {
                     "PARTIAL SUCCESS (CHUNKED $($_.SuccessfulTabs)/$($_.SuccessfulTabs + $_.FailedTabs)) - $($_.HostName)"
                 }
-            } else {
+            }
+            else {
                 # Standard export result
                 "$($_.Message) - $($_.HostName)"
             }
-        } else {
+        }
+        else {
             "$($_.Message) - $($_.HostName)"
         }
     }

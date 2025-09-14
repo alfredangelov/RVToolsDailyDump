@@ -17,6 +17,11 @@
 .PARAMETER HostListPath
     Path to a PSD1 host list file. Defaults to `shared/HostList.psd1`.
 
+.PARAMETER ExportMode
+    Export mode for all hosts. Options: 'Normal' (default), 'Chunked', or any valid RVTools tab name
+    (e.g., 'vHealth', 'vLicense', 'vInfo', 'vDatastore'). Single-tab exports are lightweight and fast.
+    Individual hosts can override this in the HostList configuration.
+
 .PARAMETER NoEmail
     Skip sending email even if enabled in configuration.
 
@@ -27,7 +32,7 @@
     Each tab is exported individually, reducing memory usage.
 
 .PARAMETER TestMode
-    When used with ChunkedExport, exports only 3 tabs (vInfo, vHost, vDatastore) for quick testing.
+    When used with ChunkedExport, exports only 3 tabs (vInfo, vHost, vCPU) for quick testing.
     Useful during development and testing of export/merge functionality.
 
 .NOTES
@@ -40,6 +45,7 @@
 param(
     [Parameter()] [string] $ConfigPath = (Join-Path $PSScriptRoot 'shared/Configuration.psd1'),
     [Parameter()] [string] $HostListPath = (Join-Path $PSScriptRoot 'shared/HostList.psd1'),
+    [Parameter()] [string] $ExportMode = 'Normal',
     [Parameter()] [switch] $NoEmail,
     [Parameter()] [switch] $DryRun,
     [Parameter()] [switch] $ChunkedExport,
@@ -63,6 +69,7 @@ catch {
 $moduleParams = @{
     ConfigPath   = $ConfigPath
     HostListPath = $HostListPath
+    ExportMode   = $ExportMode
     DryRun       = $DryRun
 }
 
