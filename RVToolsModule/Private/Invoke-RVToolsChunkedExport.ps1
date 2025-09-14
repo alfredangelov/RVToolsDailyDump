@@ -32,7 +32,7 @@ function Invoke-RVToolsChunkedExport {
         Simulate the export without actually running RVTools.
 
     .PARAMETER TestMode
-        Use a minimal set of 3 tabs (vInfo, vHost, vDatastore) for quick testing instead of all 26 tabs.
+        Use a minimal set of 3 tabs (vInfo, vHost, vCPU) for quick testing instead of all 26 tabs.
 
     .PARAMETER LogFile
         Path to log file for output.
@@ -119,7 +119,7 @@ function Invoke-RVToolsChunkedExport {
         $rvToolsTabs = @(
             @{ Command = 'ExportvInfo2xlsx'; FileName = 'vInfo' },
             @{ Command = 'ExportvHost2xlsx'; FileName = 'vHost' },
-            @{ Command = 'ExportvDatastore2xlsx'; FileName = 'vDatastore' }
+            @{ Command = 'ExportvCPU2xlsx'; FileName = 'vCPU' }
         )
     }
     else {

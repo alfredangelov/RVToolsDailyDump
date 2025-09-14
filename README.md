@@ -6,7 +6,7 @@ A reliable, configuration-driven PowerShell toolkit for automating RVTools expor
 
 ### **Major New Features: TestMode & Enhanced Testing**
 
-- **TestMode Parameter**: Fast development testing with only 3 tabs (vInfo, vHost, vDatastore) instead of all 26
+- **TestMode Parameter**: Fast development testing with only 3 tabs (vInfo, vHost, vCPU) instead of all 26
 - **Chunked Export Testing**: Comprehensive test framework for chunked export functionality validation
 - **Version Management Cleanup**: Centralized version tracking to README.md and CHANGELOG.md only
 - **Automatic Log4Net Fix**: Self-healing deployment that prevents RVTools hanging issues
@@ -346,6 +346,32 @@ The timeout monitoring system provides significant reliability improvements:
 - **Continues Processing**: Export continues with remaining tabs even if some tabs hang or fail
 - **Better Visibility**: Process IDs and timeout status are logged for troubleshooting
 - **Production Ready**: Suitable for unattended scheduled operations without manual intervention
+
+### RVTools Tab Performance Characteristics
+
+Understanding which tabs are resource-intensive helps explain timeout behavior and export duration:
+
+#### ⏱️ **Tabs That Take the Longest**
+
+- **vDatastore (DS Tab)**: Queries all datastores and their properties via vSphere API
+  - *Why slow?* Requires multiple calls to vCenter for capacity, free space, and connected hosts
+  - *Timeout:* 20 minutes (extended timeout for this tab)
+
+- **vSnapshots (SN Tab)**: Scans all VMs for snapshots
+  - *Why slow?* Each VM needs to be queried individually for snapshot information
+  - *Timeout:* 10 minutes
+
+- **vHealth**: Performs health checks across multiple objects
+  - *Why slow?* Runs many validation rules across the entire infrastructure
+  - *Timeout:* 10 minutes
+
+#### ⚡ **Tabs That Are Fast**
+
+- **vInfo, vCPU, vMemory, vNIC, vDisk**: These mostly pull VM inventory data in bulk
+  - *Why fast?* Leverage efficient bulk API calls for VM properties
+  - *Typical duration:* 30 seconds to 2 minutes per tab
+
+**💡 Pro Tip**: When using TestMode, the toolkit exports only the fastest tabs (vInfo, vHost, vCPU) to provide quick development feedback while still testing the most critical functionality. These tabs were specifically chosen because they avoid the slowest operations (like vDatastore storage queries) while still covering VM inventory, host infrastructure, and compute resource data.
 
 ### Per-Host Export Mode Configuration
 
