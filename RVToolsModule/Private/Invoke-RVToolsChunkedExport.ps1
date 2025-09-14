@@ -172,16 +172,41 @@ function Invoke-RVToolsChunkedExport {
                 if (-not $DryRun) {
                     Write-RVToolsLog -Message "DEBUG: About to execute RVTools with args: $($rvToolsArgs -join ' ')" -Level 'DEBUG' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
                     
-                    $process = Start-Process -FilePath $RVToolsPath -ArgumentList $rvToolsArgs -Wait -PassThru -NoNewWindow
+                    # Start RVTools process without -Wait to enable timeout monitoring
+                    $process = Start-Process -FilePath $RVToolsPath -ArgumentList $rvToolsArgs -PassThru -NoNewWindow
+                    Write-RVToolsLog -Message "Started RVTools process (PID: $($process.Id)) for $($tab.FileName) tab" -Level 'INFO' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
                     
-                    Write-RVToolsLog -Message "DEBUG: RVTools process completed with exit code: $($process.ExitCode)" -Level 'DEBUG' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
+                    # Wait for process with timeout (10 minutes for most tabs, 20 for datastore)
+                    $timeoutMinutes = if ($tab.FileName -eq 'vDatastore') { 20 } else { 10 }
+                    $timeoutMilliseconds = $timeoutMinutes * 60 * 1000
                     
-                    if (Test-Path $tabFile) {
-                        $exportedFiles += $tabFile
-                        Write-RVToolsLog -Message "Successfully exported $($tab.FileName) tab" -Level 'INFO' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
+                    Write-RVToolsLog -Message "Waiting for $($tab.FileName) export (timeout: $timeoutMinutes minutes)..." -Level 'INFO' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
+                    
+                    if ($process.WaitForExit($timeoutMilliseconds)) {
+                        Write-RVToolsLog -Message "DEBUG: RVTools process completed with exit code: $($process.ExitCode)" -Level 'DEBUG' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
+                        
+                        if (Test-Path $tabFile) {
+                            $exportedFiles += $tabFile
+                            Write-RVToolsLog -Message "Successfully exported $($tab.FileName) tab" -Level 'INFO' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
+                        }
+                        else {
+                            Write-RVToolsLog -Message "RVTools failed to create file for $($tab.FileName)" -Level 'WARN' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
+                        }
                     }
                     else {
-                        Write-RVToolsLog -Message "RVTools failed to create file for $($tab.FileName)" -Level 'WARN' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
+                        # Process timed out
+                        Write-RVToolsLog -Message "RVTools process timed out after $timeoutMinutes minutes for $($tab.FileName)" -Level 'ERROR' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
+                        
+                        try {
+                            if (-not $process.HasExited) {
+                                Write-RVToolsLog -Message "Terminating hung RVTools process (PID: $($process.Id))" -Level 'WARN' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
+                                $process.Kill()
+                                $process.WaitForExit(5000) # Wait up to 5 seconds for cleanup
+                            }
+                        }
+                        catch {
+                            Write-RVToolsLog -Message "Failed to terminate hung process: $($_.Exception.Message)" -Level 'ERROR' -LogFile $LogFile -ConfigLogLevel $ConfigLogLevel
+                        }
                     }
                 }
                 else {

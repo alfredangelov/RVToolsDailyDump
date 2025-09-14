@@ -36,6 +36,14 @@
 - **Improved Reliability**: Ensures RVTools works correctly out-of-the-box after toolkit setup
 - **Comprehensive Setup**: One-command deployment with all critical fixes applied automatically
 
+#### **Chunked Export Reliability Enhancement**
+
+- **Process Timeout Monitoring**: Added intelligent timeout handling for RVTools processes to prevent infinite hangs
+- **Tab-Specific Timeouts**: 10 minutes for standard tabs, 20 minutes for resource-intensive datastore exports
+- **Automatic Process Cleanup**: Hung RVTools processes are automatically detected and terminated
+- **Improved Process Visibility**: Process IDs and timeout status logged for better troubleshooting
+- **Graceful Recovery**: Scripts continue with merge operations after handling hung processes
+
 ### **🔧 Technical Implementation**
 
 #### **TestMode Implementation**
@@ -108,7 +116,7 @@
 - **Documentation Consistency**: Aligned all version numbers across codebase
 - **Enhanced Troubleshooting**: Added comprehensive test utilities documentation
 
-### **🔧 Technical Implementation**
+### **🔧 Technical Implementation
 
 #### **Mock Data Functions**
 

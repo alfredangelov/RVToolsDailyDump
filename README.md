@@ -10,6 +10,7 @@ A reliable, configuration-driven PowerShell toolkit for automating RVTools expor
 - **Chunked Export Testing**: Comprehensive test framework for chunked export functionality validation
 - **Version Management Cleanup**: Centralized version tracking to README.md and CHANGELOG.md only
 - **Automatic Log4Net Fix**: Self-healing deployment that prevents RVTools hanging issues
+- **Process Timeout Monitoring**: Intelligent timeout handling prevents infinite hangs during chunked exports
 - **Performance Benefits**: Single-tab exports are 350x smaller (9-10KB vs 350KB+)
 - **License Auditing**: Use `vLicense` exports for efficient license tracking
 - **Smart Integration**: Seamlessly integrated with existing Normal/Chunked export modes
@@ -317,15 +318,17 @@ Then run a real export:
 
 1. **Individual Tab Exports**: Exports each of the 26 RVTools tabs separately (vInfo, vCPU, vMemory, vDisk, etc.)
 2. **Memory Efficiency**: Each tab uses less memory than full export, reducing crash risk
-3. **Fault Tolerance**: Continues even if some tabs fail due to crashes
-4. **Smart Merging**: Uses **ImportExcel PowerShell module** to combine successful tabs into single consolidated file
+3. **Process Timeout Monitoring**: Built-in timeout protection prevents hung exports (10-20 minutes per tab)
+4. **Automatic Recovery**: Hung processes are detected and terminated, allowing the export to continue
+5. **Fault Tolerance**: Continues even if some tabs fail due to crashes
+6. **Smart Merging**: Uses **ImportExcel PowerShell module** to combine successful tabs into single consolidated file
    - **No Excel Installation Required**: Uses ImportExcel module instead of Excel COM automation
    - **Server-Friendly**: Works on Windows Server Core and containers
    - **Enhanced Reliability**: No COM object management or Excel process issues
    - Automatically excludes duplicate vMetaData tabs (keeps only the first one)
    - Handles empty worksheets gracefully (shows warnings but continues processing)
    - Maintains all unique data while reducing file complexity
-5. **Automatic Cleanup**: Removes all temporary tab files after merge completion (regardless of success/failure)
+7. **Automatic Cleanup**: Removes all temporary tab files after merge completion (regardless of success/failure)
 
 ### When to Use Each Mode
 
@@ -333,6 +336,16 @@ Then run a real export:
 - **Chunked Mode**: Large environments with memory issues or partial data acceptable
 - **Single-Tab Mode**: Connectivity testing, license auditing, targeted monitoring
 - **Server Deployment**: No Excel installation required (uses ImportExcel module)
+
+### Reliability Benefits
+
+The timeout monitoring system provides significant reliability improvements:
+
+- **Prevents Infinite Hangs**: Scripts automatically timeout after reasonable wait periods (10-20 minutes per tab)
+- **Automatic Recovery**: Hung RVTools processes are detected and terminated automatically
+- **Continues Processing**: Export continues with remaining tabs even if some tabs hang or fail
+- **Better Visibility**: Process IDs and timeout status are logged for troubleshooting
+- **Production Ready**: Suitable for unattended scheduled operations without manual intervention
 
 ### Per-Host Export Mode Configuration
 
