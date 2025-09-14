@@ -6,9 +6,6 @@
     This script tests the configuration file loading, template fallback,
     and configuration validation functionality of the RVTools toolkit.
 
-.VERSION
-    1.4.2
-
 .PARAMETER ConfigPath
     Path to test a specific configuration file.
 
@@ -34,7 +31,7 @@ $ErrorActionPreference = 'Stop'
 function Write-Log {
     param(
         [Parameter(Mandatory)] [string] $Message,
-        [ValidateSet('INFO','WARN','ERROR','SUCCESS','FAIL')] [string] $Level = 'INFO'
+        [ValidateSet('INFO', 'WARN', 'ERROR', 'SUCCESS', 'FAIL')] [string] $Level = 'INFO'
     )
     $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
     $color = switch ($Level) {
@@ -69,7 +66,8 @@ function Test-ConfigurationFile {
         foreach ($section in $requiredSections) {
             if ($config.ContainsKey($section)) {
                 Write-Log -Level 'SUCCESS' -Message "Required section found: $section"
-            } else {
+            }
+            else {
                 Write-Log -Level 'FAIL' -Message "Missing required section: $section"
                 return $false
             }
@@ -81,7 +79,8 @@ function Test-ConfigurationFile {
             foreach ($key in $authKeys) {
                 if ($config.Auth.ContainsKey($key)) {
                     Write-Log -Level 'SUCCESS' -Message "Auth.$key found: $($config.Auth[$key])"
-                } else {
+                }
+                else {
                     Write-Log -Level 'WARN' -Message "Optional Auth.$key not found"
                 }
             }
@@ -90,12 +89,14 @@ function Test-ConfigurationFile {
         # Test password encryption setting
         if ($config.Auth.ContainsKey('UsePasswordEncryption')) {
             Write-Log -Level 'SUCCESS' -Message "UsePasswordEncryption: $($config.Auth.UsePasswordEncryption)"
-        } else {
+        }
+        else {
             Write-Log -Level 'WARN' -Message "UsePasswordEncryption not specified (will default to true)"
         }
         
         return $true
-    } catch {
+    }
+    catch {
         Write-Log -Level 'ERROR' -Message "Failed to parse $FilePath : $($_.Exception.Message)"
         return $false
     }
@@ -137,7 +138,8 @@ function Test-HostListFile {
                             if ($hostEntry.ContainsKey('Username')) {
                                 Write-Log -Level 'SUCCESS' -Message "  Username: $($hostEntry.Username)"
                             }
-                        } else {
+                        }
+                        else {
                             Write-Log -Level 'FAIL' -Message "  Hashtable missing 'Name' key"
                             return $false
                         }
@@ -147,13 +149,15 @@ function Test-HostListFile {
                     }
                 }
             }
-        } else {
+        }
+        else {
             Write-Log -Level 'FAIL' -Message "Host list is empty, null, or missing 'Hosts' property"
             return $false
         }
         
         return $true
-    } catch {
+    }
+    catch {
         Write-Log -Level 'ERROR' -Message "Failed to parse $FilePath : $($_.Exception.Message)"
         return $false
     }
@@ -169,7 +173,8 @@ $testResults = @()
 # Test configuration files
 if ($ConfigPath) {
     $testResults += Test-ConfigurationFile -FilePath $ConfigPath -TestName "Custom Configuration"
-} else {
+}
+else {
     # Test template configuration
     $configTemplate = Join-Path $scriptRoot "shared\Configuration-Template.psd1"
     $testResults += Test-ConfigurationFile -FilePath $configTemplate -TestName "Configuration Template"
@@ -178,7 +183,8 @@ if ($ConfigPath) {
     $liveConfig = Join-Path $scriptRoot "shared\Configuration.psd1"
     if (Test-Path $liveConfig) {
         $testResults += Test-ConfigurationFile -FilePath $liveConfig -TestName "Live Configuration"
-    } else {
+    }
+    else {
         Write-Log -Level 'INFO' -Message "Live configuration not found (expected for clean repo)"
     }
 }
@@ -190,7 +196,8 @@ $testResults += Test-HostListFile -FilePath $hostTemplate -TestName "Host List T
 $liveHostList = Join-Path $scriptRoot "shared\HostList.psd1"
 if (Test-Path $liveHostList) {
     $testResults += Test-HostListFile -FilePath $liveHostList -TestName "Live Host List"
-} else {
+}
+else {
     Write-Log -Level 'INFO' -Message "Live host list not found (expected for clean repo)"
 }
 
@@ -205,7 +212,8 @@ $totalTests = $testResults.Count
 if ($passedTests -eq $totalTests) {
     Write-Log -Level 'SUCCESS' -Message "All tests passed! ($passedTests/$totalTests)"
     exit 0
-} else {
+}
+else {
     Write-Log -Level 'FAIL' -Message "Some tests failed! ($passedTests/$totalTests)"
     exit 1
 }

@@ -7,9 +7,6 @@
     method as the official RVToolsPasswordEncryption.ps1 script. It shows how
     passwords are encrypted and can be used to verify the encryption works.
 
-.VERSION
-    1.4.2
-
 .PARAMETER TestPassword
     Test password to encrypt. If not provided, prompts securely.
     Note: This is a test script parameter - in production use SecureString.
@@ -43,7 +40,7 @@ Set-StrictMode -Version Latest
 function Write-Log {
     param(
         [Parameter(Mandatory)] [string] $Message,
-        [ValidateSet('INFO','WARN','ERROR','SUCCESS')] [string] $Level = 'INFO'
+        [ValidateSet('INFO', 'WARN', 'ERROR', 'SUCCESS')] [string] $Level = 'INFO'
     )
     $line = "{0} [{1}] {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
     Write-Host $line
@@ -81,7 +78,8 @@ function Test-PasswordDecryption {
         $plainPassword = $credential.GetNetworkCredential().Password
         
         return $plainPassword
-    } catch {
+    }
+    catch {
         Write-Log -Level 'ERROR' -Message "Failed to decrypt password: $($_.Exception.Message)"
         return $null
     }
@@ -96,7 +94,8 @@ if ($TestPassword) {
     $securePassword = $TestPassword | ConvertTo-SecureString -AsPlainText -Force
     $testCredential = New-Object System.Management.Automation.PSCredential("testuser", $securePassword)
     Write-Log -Level 'INFO' -Message "Using provided test password"
-} else {
+}
+else {
     Write-Log -Level 'INFO' -Message "Please enter a test password for encryption:"
     $testCredential = Get-Credential -UserName "testuser" -Message "Enter test password"
 }
@@ -121,10 +120,12 @@ if ($decryptedPassword) {
     $originalPassword = $testCredential.GetNetworkCredential().Password
     if ($decryptedPassword -eq $originalPassword) {
         Write-Log -Level 'SUCCESS' -Message "Decryption test passed! Password matches original."
-    } else {
+    }
+    else {
         Write-Log -Level 'ERROR' -Message "Decryption test failed! Password does not match original."
     }
-} else {
+}
+else {
     Write-Log -Level 'ERROR' -Message "Decryption test failed!"
 }
 

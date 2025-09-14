@@ -6,11 +6,8 @@
     This script runs all available tests for the RVTools toolkit components,
     including configuration validation, credential management, and password encryption tests.
 
-.VERSION
-    3.2.0
-
 .PARAMETER TestSuite
-    Specific test suite to run. Options: All, Configuration, Credentials, Encryption, Module, ExcelMerge
+    Specific test suite to run. Options: All, Configuration, Credentials, Encryption, Module, ExcelMerge, ChunkedExport
 
 .PARAMETER NoCleanup
     Skip cleanup operations (preserve test vaults, files, etc.)
@@ -28,13 +25,16 @@
     .\Run-Tests.ps1 -TestSuite ExcelMerge
 
 .EXAMPLE
+    .\Run-Tests.ps1 -TestSuite ChunkedExport
+
+.EXAMPLE
     .\Run-Tests.ps1 -Verbose -NoCleanup
 #>
 
 [CmdletBinding()]
 param(
     [Parameter()] 
-    [ValidateSet('All', 'Configuration', 'Credentials', 'Encryption', 'Module', 'ExcelMerge')]
+    [ValidateSet('All', 'Configuration', 'Credentials', 'Encryption', 'Module', 'ExcelMerge', 'ChunkedExport')]
     [string] $TestSuite = 'All',
     
     [Parameter()] [switch] $NoCleanup
@@ -46,7 +46,7 @@ $ErrorActionPreference = 'Stop'
 function Write-Log {
     param(
         [Parameter(Mandatory)] [string] $Message,
-        [ValidateSet('INFO','WARN','ERROR','SUCCESS','FAIL','HEADER')] [string] $Level = 'INFO'
+        [ValidateSet('INFO', 'WARN', 'ERROR', 'SUCCESS', 'FAIL', 'HEADER')] [string] $Level = 'INFO'
     )
     $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
     $color = switch ($Level) {
@@ -63,7 +63,8 @@ function Write-Log {
         Write-Host "=" * 60 -ForegroundColor $color
         Write-Host "  $Message" -ForegroundColor $color
         Write-Host "=" * 60 -ForegroundColor $color
-    } else {
+    }
+    else {
         Write-Host "[$timestamp] [$Level] $Message" -ForegroundColor $color
     }
 }
@@ -109,16 +110,19 @@ function Invoke-TestScript {
                 if ($result.FailedCount -eq 0) {
                     Write-Log -Level 'SUCCESS' -Message "$TestName completed successfully - $($result.PassedCount)/$($result.TotalCount) tests passed (Duration: $($duration.TotalSeconds.ToString('F1'))s)"
                     return $true
-                } else {
+                }
+                else {
                     Write-Log -Level 'FAIL' -Message "$TestName failed - $($result.FailedCount) out of $($result.TotalCount) tests failed (Duration: $($duration.TotalSeconds.ToString('F1'))s)"
                     return $false
                 }
                 
-            } catch {
+            }
+            catch {
                 Write-Log -Level 'ERROR' -Message "Pester execution failed: $($_.Exception.Message)"
                 return $false
             }
-        } else {
+        }
+        else {
             # Handle regular PowerShell tests
             # Build parameter string for splatting
             $paramString = ""
@@ -129,10 +133,12 @@ function Invoke-TestScript {
                     if ($value -is [bool]) {
                         if ($value) {
                             $paramArray += "-$key"
-                        } else {
+                        }
+                        else {
                             $paramArray += "-$key" + ':$false'
                         }
-                    } else {
+                    }
+                    else {
                         $paramArray += "-$key `"$value`""
                     }
                 }
@@ -142,7 +148,8 @@ function Invoke-TestScript {
             # Execute the test script
             $result = if ($paramString) {
                 Invoke-Expression "& `"$ScriptPath`" $paramString"
-            } else {
+            }
+            else {
                 & $ScriptPath
             }
             
@@ -152,12 +159,14 @@ function Invoke-TestScript {
             if ($exitCode -eq 0 -or $result -eq $true) {
                 Write-Log -Level 'SUCCESS' -Message "$TestName completed successfully (Duration: $($duration.TotalSeconds.ToString('F1'))s)"
                 return $true
-            } else {
+            }
+            else {
                 Write-Log -Level 'FAIL' -Message "$TestName failed (Exit Code: $exitCode, Duration: $($duration.TotalSeconds.ToString('F1'))s)"
                 return $false
             }
         }
-    } catch {
+    }
+    catch {
         Write-Log -Level 'ERROR' -Message "$TestName threw exception: $($_.Exception.Message)"
         return $false
     }
@@ -183,11 +192,13 @@ function Get-TestEnvironmentInfo {
             $moduleInfo = Get-Module -Name $module -ListAvailable
             if ($moduleInfo) {
                 Write-Log -Level 'SUCCESS' -Message "Module available: $module ($($moduleInfo.Version))"
-            } else {
+            }
+            else {
                 Write-Log -Level 'WARN' -Message "Module not found: $module"
             }
         }
-    } catch {
+    }
+    catch {
         Write-Log -Level 'ERROR' -Message "Failed to gather environment info: $($_.Exception.Message)"
     }
 }
@@ -206,34 +217,43 @@ Get-TestEnvironmentInfo
 # Define available tests
 $availableTests = @{
     'Configuration' = @{
-        Script = Join-Path $testDirectory 'Test-Configuration.ps1'
-        Name = 'Configuration & Host List Tests'
+        Script     = Join-Path $testDirectory 'Test-Configuration.ps1'
+        Name       = 'Configuration & Host List Tests'
         Parameters = @{}
     }
-    'Credentials' = @{
-        Script = Join-Path $testDirectory 'Test-Credentials.ps1'
-        Name = 'Credential Management Tests'
+    'Credentials'   = @{
+        Script     = Join-Path $testDirectory 'Test-Credentials.ps1'
+        Name       = 'Credential Management Tests'
         Parameters = @{
-            TestVault = 'RVToolsTestSuite'
+            TestVault    = 'RVToolsTestSuite'
             CleanupAfter = $cleanup
         }
     }
-    'Encryption' = @{
-        Script = Join-Path $testDirectory 'Test-RVToolsPasswordEncryption.ps1'
-        Name = 'Password Encryption Tests'
+    'Encryption'    = @{
+        Script     = Join-Path $testDirectory 'Test-RVToolsPasswordEncryption.ps1'
+        Name       = 'Password Encryption Tests'
         Parameters = @{}
     }
-    'Module' = @{
-        Script = Join-Path $testDirectory 'RVToolsModule.Tests.ps1'
-        Name = 'RVToolsModule Pester Tests'
+    'Module'        = @{
+        Script     = Join-Path $testDirectory 'RVToolsModule.Tests.ps1'
+        Name       = 'RVToolsModule Pester Tests'
         Parameters = @{}
-        IsPester = $true
+        IsPester   = $true
     }
-    'ExcelMerge' = @{
-        Script = Join-Path $testDirectory 'Test-RVToolsExcelMerge.ps1'
-        Name = 'Excel Merge Functionality Tests'
+    'ExcelMerge'    = @{
+        Script     = Join-Path $testDirectory 'Test-RVToolsExcelMerge.ps1'
+        Name       = 'Excel Merge Functionality Tests'
         Parameters = @{
             QuickTest = $true
+        }
+    }
+    'ChunkedExport' = @{
+        Script     = Join-Path $testDirectory 'Test-RVToolsChunkedExport.ps1'
+        Name       = 'Chunked Export Functionality Tests'
+        Parameters = @{
+            HostName         = 'uppsvcenter001.helpsystems.com'
+            TestMode         = $true
+            SkipActualExport = $true
         }
     }
 }
@@ -246,6 +266,7 @@ $testsToRun = switch ($TestSuite) {
     'Encryption' { @('Encryption') }
     'Module' { @('Module') }
     'ExcelMerge' { @('ExcelMerge') }
+    'ChunkedExport' { @('ChunkedExport') }
 }
 
 Write-Log -Level 'HEADER' -Message "Running Test Suite: $TestSuite"
@@ -257,9 +278,9 @@ foreach ($testKey in $testsToRun) {
     $result = Invoke-TestScript -ScriptPath $test.Script -TestName $test.Name -Parameters $test.Parameters -IsPester:$isPesterTest
     
     $testResults += @{
-        Name = $test.Name
+        Name   = $test.Name
         Result = $result
-        Key = $testKey
+        Key    = $testKey
     }
 }
 
@@ -288,7 +309,8 @@ foreach ($result in $testResults) {
 if ($passedTests -eq $totalTests) {
     Write-Log -Level 'SUCCESS' -Message "All tests passed! ✅"
     exit 0
-} else {
+}
+else {
     Write-Log -Level 'FAIL' -Message "Some tests failed! ❌"
     exit 1
 }

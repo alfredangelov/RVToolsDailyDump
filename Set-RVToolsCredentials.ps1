@@ -38,9 +38,8 @@
     .\Set-RVToolsCredentials.ps1 -ListCredentials
 
 .NOTES
-    Version: 3.2.0
-    Refactored in v2.1.0: Leverages RVToolsModule functions for better code reuse and consistency.
-    Enhanced in v1.3.0: Username parameter support for credential removal and improved secret name parsing.
+    Refactored to leverage RVToolsModule functions for better code reuse and consistency.
+    Enhanced to support username parameter for credential removal and improved secret name parsing.
 #>
 
 [CmdletBinding(DefaultParameterSetName = 'Single')]
@@ -72,18 +71,19 @@ try {
     function Write-Log {
         param(
             [Parameter(Mandatory)] [string] $Message,
-            [ValidateSet('INFO','WARN','ERROR','SUCCESS')] [string] $Level = 'INFO'
+            [ValidateSet('INFO', 'WARN', 'ERROR', 'SUCCESS')] [string] $Level = 'INFO'
         )
         Write-RVToolsLog -Message $Message -Level $Level
     }
-} catch {
+}
+catch {
     Write-Warning "RVToolsModule not available. Using local functions."
     
     # Fallback function
     function Write-Log {
         param(
             [Parameter(Mandatory)] [string] $Message,
-            [ValidateSet('INFO','WARN','ERROR','SUCCESS')] [string] $Level = 'INFO'
+            [ValidateSet('INFO', 'WARN', 'ERROR', 'SUCCESS')] [string] $Level = 'INFO'
         )
         $line = "{0} [{1}] {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
         Write-Host $line
@@ -106,7 +106,8 @@ try {
     $cfg = $configResult.Configuration
     $vaultName = $cfg.Auth.DefaultVault ?? 'RVToolsVault'
     $secretPattern = $cfg.Auth.SecretNamePattern ?? '{HostName}-{Username}'
-} catch {
+}
+catch {
     Write-Log -Level 'ERROR' -Message "Failed to load configuration: $($_.Exception.Message)"
     exit 1
 }
@@ -121,7 +122,8 @@ try {
         exit 1
     }
     Write-Log -Level 'INFO' -Message "Using vault: $vaultName"
-} catch {
+}
+catch {
     Write-Log -Level 'ERROR' -Message "SecretManagement not available or vault test failed: $($_.Exception.Message)"
     Write-Log -Level 'ERROR' -Message "Please install Microsoft.PowerShell.SecretManagement module and run Initialize-RVToolsDependencies.ps1"
     exit 1
@@ -138,18 +140,21 @@ switch ($PSCmdlet.ParameterSetName) {
                 if ($lastDash -gt 0) {
                     $hostName = $secret.Name.Substring(0, $lastDash)
                     $user = $secret.Name.Substring($lastDash + 1)
-                } else {
+                }
+                else {
                     $hostName = $secret.Name
                     $user = ''
                 }
                 $lastModified = if ($secret.Metadata -and $secret.Metadata.ContainsKey('LastModified')) { 
                     $secret.Metadata.LastModified 
-                } else { 
+                }
+                else { 
                     'Unknown' 
                 }
                 Write-Host "Host: $hostName | Username: $user | Type: $($secret.Type) | Modified: $lastModified"
             }
-        } else {
+        }
+        else {
             Write-Log -Level 'WARN' -Message "No credentials found in vault: $vaultName"
         }
     }
@@ -167,7 +172,8 @@ switch ($PSCmdlet.ParameterSetName) {
         try {
             Remove-Secret -Name $secretName -Vault $vaultName -Confirm:$false
             Write-Log -Level 'SUCCESS' -Message "Removed credential for $HostName ($Username)"
-        } catch {
+        }
+        catch {
             Write-Log -Level 'ERROR' -Message "Failed to remove credential: $($_.Exception.Message)"
         }
     }
@@ -190,7 +196,8 @@ switch ($PSCmdlet.ParameterSetName) {
         try {
             Set-Secret -Name $secretName -Secret $credential -Vault $vaultName
             Write-Log -Level 'SUCCESS' -Message "Stored credential for $HostName ($Username)"
-        } catch {
+        }
+        catch {
             Write-Log -Level 'ERROR' -Message "Failed to store credential: $($_.Exception.Message)"
         }
     }
@@ -207,10 +214,10 @@ switch ($PSCmdlet.ParameterSetName) {
         $servers = @(
             foreach ($item in $hostItems) {
                 switch ($item.GetType().Name) {
-                    'String'      { [pscustomobject]@{ Name = $item; Username = $null } }
-                    'Hashtable'   { [pscustomobject]@{ Name = $item.Name; Username = $item.Username } }
+                    'String' { [pscustomobject]@{ Name = $item; Username = $null } }
+                    'Hashtable' { [pscustomobject]@{ Name = $item.Name; Username = $item.Username } }
                     'PSCustomObject' { [pscustomobject]@{ Name = $item.Name; Username = $item.Username } }
-                    default       { Write-Warning "Unsupported host list entry type: $($item.GetType().FullName)"; continue }
+                    default { Write-Warning "Unsupported host list entry type: $($item.GetType().FullName)"; continue }
                 }
             }
         ) | Where-Object { $_.Name }
@@ -227,7 +234,8 @@ switch ($PSCmdlet.ParameterSetName) {
             try {
                 Set-Secret -Name $secretName -Secret $credential -Vault $vaultName
                 Write-Log -Level 'SUCCESS' -Message "Stored credential for $($server.Name) ($user)"
-            } catch {
+            }
+            catch {
                 Write-Log -Level 'ERROR' -Message "Failed to store credential for $($server.Name): $($_.Exception.Message)"
             }
         }

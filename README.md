@@ -1,13 +1,15 @@
 # RVTools Daily Dump Toolkit
 
-A reliable, configuration-driven PowerShell toolkit for automating RVTools exports across multiple vCenter servers with secure credential management. **Now featuring granular single-tab export capability for lightweight testing and targeted data collection.**
+A reliable, configuration-driven PowerShell toolkit for automating RVTools exports across multiple vCenter servers with secure credential management. **Now featuring TestMode for rapid development and comprehensive chunked export testing.**
 
-## 🚀 Version 3.2.0 - Testing Infrastructure Enhancement
+## 🚀 Version 3.3.0 - TestMode & Development Efficiency Enhancement
 
-### **Major New Feature: Granular Export Control**
+### **Major New Features: TestMode & Enhanced Testing**
 
-- **Single-Tab Exports**: Export specific RVTools tabs (e.g., `vLicense`, `vInfo`, `vHost`) instead of all 26 tabs
-- **Lightweight Testing**: Perfect for quick connectivity tests and targeted data collection
+- **TestMode Parameter**: Fast development testing with only 3 tabs (vInfo, vHost, vDatastore) instead of all 26
+- **Chunked Export Testing**: Comprehensive test framework for chunked export functionality validation
+- **Version Management Cleanup**: Centralized version tracking to README.md and CHANGELOG.md only
+- **Automatic Log4Net Fix**: Self-healing deployment that prevents RVTools hanging issues
 - **Performance Benefits**: Single-tab exports are 350x smaller (9-10KB vs 350KB+)
 - **License Auditing**: Use `vLicense` exports for efficient license tracking
 - **Smart Integration**: Seamlessly integrated with existing Normal/Chunked export modes
@@ -163,6 +165,7 @@ This will:
 - Install Microsoft.PowerShell.SecretManagement and SecretStore modules
 - Install Microsoft.Graph.Authentication and Microsoft.Graph.Users.Actions modules (if Microsoft Graph email is configured)
 - **Automatically install RVTools via winget** (if not present and winget is available)
+- **Automatically apply log4net configuration fix** to prevent RVTools hanging issues
 - Create and configure the RVToolsVault for unattended operation
 - Validate RVTools installation and path configuration
 - Create required directories (export/, log/)
@@ -418,7 +421,7 @@ The **FullValidation** mode now uses the new `vLicense` single-tab export functi
 
 - PowerShell 7+ (recommended) or Windows PowerShell 5.1
 - RVTools 4.0+ installed (validated with Dell RVTools CLI standards)
-- **RVToolsModule v3.2.0** (included in this toolkit)
+- **RVToolsModule v3.3.0** (included in this toolkit)
 - Microsoft.PowerShell.SecretManagement module
 - Microsoft.PowerShell.SecretStore module
 - ImportExcel module (for chunked export merging - no Excel installation required)
@@ -473,7 +476,7 @@ RVToolsDailyDump/
 ├── Set-MicrosoftGraphCredentials.ps1     # Microsoft Graph secret management (enhanced)
 ├── Initialize-RVToolsDependencies.ps1    # Setup and validation (enhanced)
 ├── RVToolsModule/                        # Professional PowerShell module (fully utilized)
-│   ├── RVToolsModule.psd1                # Module manifest (v3.2.0)
+│   ├── RVToolsModule.psd1                # Module manifest (v3.3.0)
 │   ├── RVToolsModule.psm1                # Module loader
 │   ├── Public/                           # 10 exported functions
 │   │   ├── Invoke-RVToolsExport.ps1      # Main export cmdlet with single-tab support
@@ -516,5 +519,5 @@ RVToolsDailyDump/
 This toolkit is provided as-is for internal use. Customize as needed for your environment.
 
 **Author**: Alfred Angelov  
-**Version**: 3.2.0  
-**Date**: August 30, 2025
+**Version**: 3.3.0  
+**Date**: September 14, 2025

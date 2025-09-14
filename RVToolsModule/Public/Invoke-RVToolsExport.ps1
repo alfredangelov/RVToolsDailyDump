@@ -179,6 +179,9 @@ function Invoke-RVToolsExport {
         [switch]$ChunkedExport,
         
         [Parameter()]
+        [switch]$TestMode,
+        
+        [Parameter()]
         [switch]$NoEmail,
         
         [Parameter()]
@@ -357,7 +360,7 @@ function Invoke-RVToolsExport {
             }
         } elseif ($useChunkedExport) {
             # Chunked export mode
-            $result = Invoke-RVToolsChunkedExport -HostName $name -Credential $cred -RVToolsPath $rvtoolsPath -ExportDirectory $exportsRoot -BaseFileName $baseFileName -UsePasswordEncryption:$usePasswordEncryption -ExtraArgs $extraArgs -DryRun:$DryRun -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
+            $result = Invoke-RVToolsChunkedExport -HostName $name -Credential $cred -RVToolsPath $rvtoolsPath -ExportDirectory $exportsRoot -BaseFileName $baseFileName -UsePasswordEncryption:$usePasswordEncryption -ExtraArgs $extraArgs -DryRun:$DryRun -TestMode:$TestMode -LogFile $script:LogFile -ConfigLogLevel $script:ConfigLogLevel
             
             if ($result) {
                 $results += $result

@@ -6,9 +6,6 @@
     This script validates and installs required PowerShell modules, initializes
     SecretManagement vaults, and validates the environment for RVTools operations.
 
-.VERSION
-    3.2.0
-
 .PARAMETER ConfigPath
     Path to the configuration file. Defaults to shared/Configuration.psd1.
 
@@ -39,14 +36,15 @@ $ErrorActionPreference = 'Stop'
 try {
     Import-Module (Join-Path $PSScriptRoot 'RVToolsModule') -Force -ErrorAction Stop
     Write-Verbose "RVToolsModule loaded successfully"
-} catch {
+}
+catch {
     Write-Warning "RVToolsModule not available. Using local functions."
     
     # Fallback function if module not available
     function Write-Log {
         param(
             [Parameter(Mandatory)] [string] $Message,
-            [ValidateSet('INFO','WARN','ERROR','SUCCESS')] [string] $Level = 'INFO'
+            [ValidateSet('INFO', 'WARN', 'ERROR', 'SUCCESS')] [string] $Level = 'INFO'
         )
         $line = "{0} [{1}] {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
         Write-Host $line
@@ -58,7 +56,7 @@ if (Get-Command Write-RVToolsLog -ErrorAction SilentlyContinue) {
     function Write-Log {
         param(
             [Parameter(Mandatory)] [string] $Message,
-            [ValidateSet('INFO','WARN','ERROR','SUCCESS')] [string] $Level = 'INFO'
+            [ValidateSet('INFO', 'WARN', 'ERROR', 'SUCCESS')] [string] $Level = 'INFO'
         )
         Write-RVToolsLog -Message $Message -Level $Level
     }
@@ -87,7 +85,8 @@ function Install-RequiredModule {
         if ($Force) {
             Write-Log -Level 'INFO' -Message "Updating module: $ModuleName"
             Update-Module -Name $ModuleName -Force
-        } else {
+        }
+        else {
             Write-Log -Level 'SUCCESS' -Message "Module already available: $ModuleName"
             return
         }
@@ -96,7 +95,7 @@ function Install-RequiredModule {
     try {
         Write-Log -Level 'INFO' -Message "Installing module: $ModuleName"
         $params = @{
-            Name = $ModuleName
+            Name  = $ModuleName
             Force = $Force
             Scope = 'CurrentUser'
         }
@@ -105,7 +104,8 @@ function Install-RequiredModule {
         }
         Install-Module @params
         Write-Log -Level 'SUCCESS' -Message "Successfully installed: $ModuleName"
-    } catch {
+    }
+    catch {
         Write-Log -Level 'ERROR' -Message "Failed to install $ModuleName : $($_.Exception.Message)"
         throw
     }
@@ -141,7 +141,8 @@ function Initialize-SecretVault {
             Set-SecretStoreConfiguration -Scope CurrentUser -Authentication None -Interaction None -Confirm:$false
             Write-Log -Level 'SUCCESS' -Message "Configured SecretStore for unattended operation"
         }
-    } catch {
+    }
+    catch {
         Write-Log -Level 'ERROR' -Message "Failed to create vault $VaultName : $($_.Exception.Message)"
         throw
     }
@@ -155,7 +156,8 @@ function Test-RVToolsPath {
     if (Test-Path -LiteralPath $RVToolsPath) {
         Write-Log -Level 'SUCCESS' -Message "RVTools executable found"
         return $true
-    } else {
+    }
+    else {
         Write-Log -Level 'WARN' -Message "RVTools executable not found at: $RVToolsPath"
         
         # Check if winget is available and offer to install RVTools
@@ -175,24 +177,46 @@ function Test-RVToolsPath {
                     # Check if RVTools is now available at the expected path
                     if (Test-Path -LiteralPath $RVToolsPath) {
                         Write-Log -Level 'SUCCESS' -Message "RVTools executable now found at: $RVToolsPath"
+                        
+                        # Apply RVTools log4net configuration fix to prevent hanging
+                        Write-Log -Level 'INFO' -Message "Applying RVTools log4net configuration fix..."
+                        try {
+                            $fixScriptPath = Join-Path $PSScriptRoot 'utilities\Fix-RVToolsLog4NetConfig.ps1'
+                            if (Test-Path $fixScriptPath) {
+                                & $fixScriptPath
+                                Write-Log -Level 'SUCCESS' -Message "RVTools log4net configuration fix applied successfully"
+                            }
+                            else {
+                                Write-Log -Level 'WARN' -Message "Fix script not found at: $fixScriptPath"
+                            }
+                        }
+                        catch {
+                            Write-Log -Level 'WARN' -Message "Failed to apply RVTools log4net fix: $($_.Exception.Message)"
+                            Write-Log -Level 'INFO' -Message "You may need to run utilities\Fix-RVToolsLog4NetConfig.ps1 manually"
+                        }
+                        
                         return $true
-                    } else {
+                    }
+                    else {
                         Write-Log -Level 'WARN' -Message "RVTools was installed but not found at expected path: $RVToolsPath"
                         Write-Log -Level 'INFO' -Message "You may need to update the RVToolsPath in your configuration file"
                         return $false
                     }
-                } else {
+                }
+                else {
                     Write-Log -Level 'ERROR' -Message "Failed to install RVTools via winget. Exit code: $LASTEXITCODE"
                     Write-Log -Level 'INFO' -Message "Error output: $($installResult -join '; ')"
                     Write-Log -Level 'INFO' -Message "Please install RVTools manually or update the RVToolsPath in configuration"
                     return $false
                 }
-            } else {
+            }
+            else {
                 Write-Log -Level 'WARN' -Message "winget is not available or not working properly"
                 Write-Log -Level 'INFO' -Message "Please install RVTools manually from https://www.robware.net/rvtools/ or update the RVToolsPath in configuration"
                 return $false
             }
-        } catch {
+        }
+        catch {
             Write-Log -Level 'WARN' -Message "Error checking winget availability: $($_.Exception.Message)"
             Write-Log -Level 'INFO' -Message "Please install RVTools manually from https://www.robware.net/rvtools/ or update the RVToolsPath in configuration"
             return $false
@@ -207,7 +231,8 @@ function Test-MicrosoftGraphModules {
     if ($authModule -and $usersActionsModule) {
         Write-Log -Level 'SUCCESS' -Message "Microsoft Graph modules available (Authentication + Users.Actions)"
         return $true
-    } else {
+    }
+    else {
         $missing = @()
         if (-not $authModule) { $missing += 'Microsoft.Graph.Authentication' }
         if (-not $usersActionsModule) { $missing += 'Microsoft.Graph.Users.Actions' }
@@ -224,14 +249,17 @@ if (Get-Command Import-RVToolsConfiguration -ErrorAction SilentlyContinue) {
     # Use module function
     $configResult = Import-RVToolsConfiguration -ConfigPath $ConfigPath -ScriptRoot $PSScriptRoot
     $cfg = $configResult.Configuration
-} else {
+}
+else {
     # Fallback method
     $cfgFile = if (Test-Path $ConfigPath) { 
         $ConfigPath 
-    } elseif (Test-Path (Join-Path $PSScriptRoot 'shared/Configuration-Template.psd1')) {
+    }
+    elseif (Test-Path (Join-Path $PSScriptRoot 'shared/Configuration-Template.psd1')) {
         Write-Log -Level 'WARN' -Message "Using template configuration for validation"
         (Join-Path $PSScriptRoot 'shared/Configuration-Template.psd1')
-    } else {
+    }
+    else {
         Write-Log -Level 'ERROR' -Message "Configuration file not found at: $ConfigPath"
         exit 1
     }
@@ -281,7 +309,8 @@ $logsRoot = Join-Path $PSScriptRoot ($cfg.LogsFolder ?? 'logs')
 foreach ($dir in @($exportsRoot, $logsRoot)) {
     if (Get-Command New-RVToolsDirectory -ErrorAction SilentlyContinue) {
         New-RVToolsDirectory -Path $dir | Out-Null
-    } else {
+    }
+    else {
         # Fallback method
         if (-not (Test-Path $dir)) {
             New-Item -ItemType Directory -Force -Path $dir | Out-Null

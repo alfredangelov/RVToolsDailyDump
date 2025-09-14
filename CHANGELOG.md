@@ -1,5 +1,91 @@
 # RVTools Daily Dump Toolkit - Changelog
 
+## [3.3.0] - 2025-09-14
+
+### **🧪 TestMode Feature & Development Efficiency Enhancement**
+
+**NEW**: Added TestMode functionality and comprehensive chunked export testing framework for improved development efficiency.
+
+#### **TestMode Feature**
+
+- **New TestMode Parameter**: Added to `Invoke-RVToolsExport` for fast development testing
+- **Reduced Tab Export**: TestMode exports only 3 critical tabs (vInfo, vHost, vDatastore) instead of all 26
+- **Performance Optimization**: TestMode completes in ~1 minute vs ~10+ minutes for full export
+- **Development Workflow**: Enables rapid iteration during development and testing
+- **Chunked Export Support**: TestMode compatible with both standard and chunked export modes
+
+#### **Chunked Export Test Framework**
+
+- **New Test Script**: `test\Test-RVToolsChunkedExport.ps1` - Comprehensive chunked export functionality testing
+- **Dry Run Testing**: Validates chunked export logic without actual RVTools execution
+- **Module Function Validation**: Tests availability of required functions and parameters
+- **Test Runner Integration**: Added ChunkedExport test suite to `Run-Tests.ps1`
+- **Return Object Validation**: Proper handling of different return object types and edge cases
+
+#### **Version Management Cleanup**
+
+- **Centralized Versioning**: Removed version references from all scripts, modules, and configuration files
+- **Documentation-Only Versioning**: Version numbers now maintained only in README.md and CHANGELOG.md
+- **Simplified Maintenance**: Version updates now require changes to only two files
+- **Cleaner Codebase**: Removed redundant version tracking throughout the codebase
+
+#### **Deployment Automation Enhancement**
+
+- **Automatic Log4Net Fix**: `Initialize-RVToolsDependencies.ps1` now automatically applies the log4net configuration fix after RVTools installation
+- **Prevents Hanging Issues**: Eliminates the need for manual log4net configuration fixes on new deployments
+- **Improved Reliability**: Ensures RVTools works correctly out-of-the-box after toolkit setup
+- **Comprehensive Setup**: One-command deployment with all critical fixes applied automatically
+
+### **🔧 Technical Implementation**
+
+#### **TestMode Implementation**
+
+- Conditional tab definition loading in `Get-RVToolsTabDefinitions`
+- Optimized tab selection for development workflows
+- Preserved full functionality while reducing export scope
+- Compatible with existing export modes and parameters
+
+#### **Test Framework Enhancements**
+
+- **Module Function Testing**: Validates `Invoke-RVToolsExport` availability and required parameters
+- **Parameter Detection**: Checks for ChunkedExport and TestMode parameter availability
+- **Error Handling**: Robust handling of different return object types (Hashtable vs String)
+- **Clean Output**: Color-coded results with detailed summaries
+
+#### **Code Quality Improvements**
+
+- Removed ~15+ version references across the codebase
+- Standardized error handling in test scripts
+- Enhanced debugging capabilities for development workflows
+- Improved maintenance efficiency for future updates
+
+### **📊 Enhanced Testing Coverage**
+
+| **Component** | **Status** | **Coverage** |
+|---|---|---|
+| TestMode Functionality | ✅ Complete | 3-tab vs 26-tab validation |
+| Chunked Export Testing | ✅ Complete | Dry run and validation testing |
+| Module Function Testing | ✅ Complete | Function availability validation |
+| Version Management | ✅ Complete | Centralized version tracking |
+
+### **🚀 TestMode Usage Examples**
+
+```powershell
+# Quick TestMode for development
+.\RVToolsDump.ps1 -ChunkedExport -TestMode -Verbose
+
+# Test chunked export functionality
+.\test\Test-RVToolsChunkedExport.ps1 -HostName "your-vcenter" -TestMode -SkipActualExport
+
+# Run chunked export test suite
+.\test\Run-Tests.ps1 -TestSuite ChunkedExport
+
+# Debug export return objects
+.\test\Debug-RVToolsExport.ps1 -ChunkedExport -TestMode
+```
+
+---
+
 ## [3.2.0] - 2025-09-04
 
 ### **🧪 Testing Infrastructure Enhancement**
@@ -25,6 +111,7 @@
 ### **🔧 Technical Implementation**
 
 #### **Mock Data Functions**
+
 - `New-MockVMData`: Generates realistic VM configurations (15 VMs with proper attributes)
 - `New-MockHostData`: Creates ESXi host data (3 hosts with cluster assignments)
 - `New-MockClusterData`: Builds cluster configurations (HA/DRS settings)
@@ -32,6 +119,7 @@
 - `New-MockMetaData`: Realistic vMetaData tabs for each export
 
 #### **Validation Framework**
+
 - File generation validation for all RVTools tabs
 - Merge operation success/failure detection
 - vMetaData deduplication verification

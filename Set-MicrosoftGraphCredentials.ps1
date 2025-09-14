@@ -6,9 +6,6 @@
     This script helps store, retrieve, update, and remove Microsoft Graph ClientSecret
     credentials from the SecretManagement vault for secure email operations.
 
-.VERSION
-    1.4.2
-
 .PARAMETER ClientSecret
     The Microsoft Graph ClientSecret to store in the vault.
 
@@ -43,19 +40,19 @@
     .\Set-MicrosoftGraphCredentials.ps1 -Remove
 #>
 
-[CmdletBinding(DefaultParameterSetName='Store')]
+[CmdletBinding(DefaultParameterSetName = 'Store')]
 param(
-    [Parameter(ParameterSetName='Store', Mandatory)] 
-    [Parameter(ParameterSetName='Update', Mandatory)] 
+    [Parameter(ParameterSetName = 'Store', Mandatory)] 
+    [Parameter(ParameterSetName = 'Update', Mandatory)] 
     [string] $ClientSecret,
     
     [Parameter()] [string] $SecretName = 'MicrosoftGraph-ClientSecret',
     [Parameter()] [string] $VaultName = 'RVToolsVault',
     
-    [Parameter(ParameterSetName='Update')] [switch] $Update,
-    [Parameter(ParameterSetName='Remove')] [switch] $Remove,
-    [Parameter(ParameterSetName='Show')] [switch] $Show,
-    [Parameter(ParameterSetName='List')] [switch] $List
+    [Parameter(ParameterSetName = 'Update')] [switch] $Update,
+    [Parameter(ParameterSetName = 'Remove')] [switch] $Remove,
+    [Parameter(ParameterSetName = 'Show')] [switch] $Show,
+    [Parameter(ParameterSetName = 'List')] [switch] $List
 )
 
 Set-StrictMode -Version Latest
@@ -70,18 +67,19 @@ try {
     function Write-Log {
         param(
             [Parameter(Mandatory)] [string] $Message,
-            [ValidateSet('INFO','WARN','ERROR','SUCCESS')] [string] $Level = 'INFO'
+            [ValidateSet('INFO', 'WARN', 'ERROR', 'SUCCESS')] [string] $Level = 'INFO'
         )
         Write-RVToolsLog -Message $Message -Level $Level
     }
-} catch {
+}
+catch {
     Write-Warning "RVToolsModule not available. Using local functions."
     
     # Fallback function
     function Write-Log {
         param(
             [Parameter(Mandatory)] [string] $Message,
-            [ValidateSet('INFO','WARN','ERROR','SUCCESS')] [string] $Level = 'INFO'
+            [ValidateSet('INFO', 'WARN', 'ERROR', 'SUCCESS')] [string] $Level = 'INFO'
         )
         $line = "{0} [{1}] {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Level, $Message
         Write-Host $line
@@ -93,7 +91,8 @@ function Test-VaultExists {
     
     if (Get-Command Test-RVToolsVault -ErrorAction SilentlyContinue) {
         return Test-RVToolsVault -VaultName $VaultName
-    } else {
+    }
+    else {
         # Fallback method
         $vault = Get-SecretVault -Name $VaultName -ErrorAction SilentlyContinue
         return $null -ne $vault
@@ -105,7 +104,8 @@ function Test-SecretExists {
     try {
         Get-Secret -Name $SecretName -Vault $VaultName -ErrorAction Stop | Out-Null
         return $true
-    } catch {
+    }
+    catch {
         return $false
     }
 }
@@ -167,12 +167,14 @@ try {
                 $secrets | ForEach-Object {
                     Write-Host "  - $($_.Name)" -ForegroundColor Green
                 }
-            } else {
+            }
+            else {
                 Write-Host "  No Microsoft Graph secrets found" -ForegroundColor Yellow
             }
         }
     }
-} catch {
+}
+catch {
     Write-Log -Level 'ERROR' -Message "Operation failed: $($_.Exception.Message)"
     exit 1
 }

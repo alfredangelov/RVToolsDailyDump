@@ -19,7 +19,6 @@ Export-ModuleMember -Function $Public.BaseName
 
 # Module variables
 $script:ModuleRoot = $PSScriptRoot
-$script:ModuleVersion = (Import-PowerShellDataFile -Path "$PSScriptRoot\RVToolsModule.psd1").ModuleVersion
 
 # Set strict mode for the module
 Set-StrictMode -Version Latest

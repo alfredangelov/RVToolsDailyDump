@@ -68,12 +68,15 @@ function Merge-RVToolsExcelFiles {
     Write-RVToolsLog -Message "Merging $($existingFiles.Count) Excel files into $DestinationFile using ImportExcel module"
     
     try {
-        # Get all worksheets from all files with their data
-        $allWorksheets = @{}
+        # Process files one at a time to avoid memory issues with large datasets
+        $processedWorksheets = @()
         $seenVMetaData = $false
+        $totalFiles = $existingFiles.Count
+        $currentFile = 0
         
         foreach ($file in $existingFiles) {
-            Write-RVToolsLog -Message "Processing $file" -Level 'DEBUG'
+            $currentFile++
+            Write-RVToolsLog -Message "Processing file $currentFile/$totalFiles`: $file" -Level 'INFO'
             
             # Get worksheet names from the file
             $worksheetNames = Get-ExcelSheetInfo -Path $file | Select-Object -ExpandProperty Name
@@ -84,71 +87,58 @@ function Merge-RVToolsExcelFiles {
                     if ($seenVMetaData) {
                         Write-RVToolsLog -Message "Skipping duplicate vMetaData tab from $file" -Level 'DEBUG'
                         continue
-                    } else {
+                    }
+                    else {
                         $seenVMetaData = $true
                     }
                 }
                 
-                # Read the worksheet data
-                Write-RVToolsLog -Message "Reading worksheet '$worksheetName' from $file" -Level 'DEBUG'
-                $worksheetData = Import-Excel -Path $file -WorksheetName $worksheetName
+                # Read and immediately write the worksheet data to avoid memory buildup
+                Write-RVToolsLog -Message "Processing worksheet '$worksheetName' from $file" -Level 'DEBUG'
                 
-                # Store with a unique key (in case of duplicate non-vMetaData sheet names)
-                $worksheetKey = if ($worksheetName -eq 'vMetaData') { 
-                    'vMetaData' 
-                } else { 
-                    "$worksheetName-$(Split-Path $file -Leaf)" 
+                try {
+                    $worksheetData = Import-Excel -Path $file -WorksheetName $worksheetName
+                    
+                    if ($worksheetData) {
+                        # Determine if this is the first worksheet (create new file) or append
+                        $isFirstWorksheet = ($processedWorksheets.Count -eq 0)
+                        
+                        $excelParams = @{
+                            Path          = $DestinationFile
+                            WorksheetName = $worksheetName
+                            AutoSize      = $true
+                        }
+                        
+                        if ($isFirstWorksheet) {
+                            # Create new file with first worksheet
+                            $excelParams.ClearSheet = $true
+                        }
+                        else {
+                            # Append to existing file
+                            $excelParams.Append = $true
+                        }
+                        
+                        $worksheetData | Export-Excel @excelParams
+                        $processedWorksheets += "$worksheetName (from $(Split-Path $file -Leaf))"
+                        Write-RVToolsLog -Message "Successfully wrote worksheet '$worksheetName'" -Level 'DEBUG'
+                    }
+                    else {
+                        Write-RVToolsLog -Message "Worksheet '$worksheetName' from $file contains no data" -Level 'WARN'
+                    }
                 }
-                
-                $allWorksheets[$worksheetKey] = @{
-                    Name = $worksheetName
-                    Data = $worksheetData
-                    SourceFile = $file
+                catch {
+                    Write-RVToolsLog -Message "Failed to process worksheet '$worksheetName' from $file`: $($_.Exception.Message)" -Level 'WARN'
                 }
             }
         }
         
-        Write-RVToolsLog -Message "Collected $($allWorksheets.Count) worksheets from $($existingFiles.Count) files" -Level 'DEBUG'
-        
-        # Create the destination Excel file with all worksheets
-        $excelParams = @{
-            Path = $DestinationFile
-            WorksheetName = 'vMetaData'  # Start with vMetaData if it exists
-            ClearSheet = $true
-            AutoSize = $true
-        }
-        
-        # Write vMetaData first if it exists
-        if ($allWorksheets.ContainsKey('vMetaData')) {
-            $vMetaDataWorksheet = $allWorksheets['vMetaData']
-            if ($vMetaDataWorksheet.Data) {
-                $vMetaDataWorksheet.Data | Export-Excel @excelParams
-                Write-RVToolsLog -Message "Exported vMetaData worksheet" -Level 'DEBUG'
-            }
-        }
-        
-        # Write all other worksheets
-        foreach ($key in $allWorksheets.Keys) {
-            if ($key -eq 'vMetaData') { continue }  # Already handled
-            
-            $worksheet = $allWorksheets[$key]
-            if ($worksheet.Data) {
-                $worksheetParams = @{
-                    Path = $DestinationFile
-                    WorksheetName = $worksheet.Name
-                    AutoSize = $true
-                    Append = $true
-                }
-                
-                $worksheet.Data | Export-Excel @worksheetParams
-                Write-RVToolsLog -Message "Exported worksheet '$($worksheet.Name)' from $($worksheet.SourceFile)" -Level 'DEBUG'
-            }
-        }
-        
+        Write-RVToolsLog -Message "Successfully processed $($processedWorksheets.Count) worksheets from $($existingFiles.Count) files" -Level 'INFO'
+        Write-RVToolsLog -Message "Processed worksheets: $($processedWorksheets -join ', ')" -Level 'DEBUG'
         Write-RVToolsLog -Message "Successfully merged $($existingFiles.Count) Excel files into $DestinationFile" -Level 'SUCCESS'
         return $true
         
-    } catch {
+    }
+    catch {
         Write-RVToolsLog -Message "Failed to merge Excel files: $($_.Exception.Message)" -Level 'ERROR'
         Write-RVToolsLog -Message "Error details: $($_.ScriptStackTrace)" -Level 'DEBUG'
         return $false

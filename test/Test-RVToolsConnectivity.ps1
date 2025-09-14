@@ -1,377 +1,344 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Tests RVTools connectivity and credential validation for all hosts in HostList.psd1.
+    Comprehensive connectivity and RVTools diagnostic test script.
 
 .DESCRIPTION
-    This script validates stored credentials from the SecretManagement vault and tests
-    basic connectivity to vCenter hosts using RVTools. It performs credential retrieval
-    testing without full export operations to quickly identify connection issues.
+    This script performs detailed connectivity and RVTools diagnostics to help
+    identify why exports might be failing. It tests network connectivity,
+    authentication, and RVTools functionality.
 
-.PARAMETER ConfigPath
-    Path to configuration file (Configuration.psd1).
+.PARAMETER HostName
+    vCenter server hostname to test.
 
-.PARAMETER HostListPath
-    Path to host list file (HostList.psd1).
+.PARAMETER Credential
+    PSCredential object for vCenter authentication (optional).
 
-.PARAMETER TestType
-    Type of connectivity test to perform:
-    - 'CredentialOnly': Only test credential retrieval from vault
-    - 'QuickConnect': Test credential + basic RVTools connection (recommended)
-    - 'FullValidation': Test credential + vLicense single-tab export (comprehensive)
+.PARAMETER RVToolsPath
+    Path to RVTools executable (optional, will auto-detect).
 
-.PARAMETER HostFilter
-    Optional filter to test specific hosts (supports wildcards).
+.PARAMETER TestExport
+    Perform an actual test export (creates a small test file).
 
-.EXAMPLE
-    .\Test-RVToolsConnectivity.ps1
-    Test all hosts with quick connection validation.
+.PARAMETER LogFile
+    Custom log file path (optional).
 
 .EXAMPLE
-    .\Test-RVToolsConnectivity.ps1 -TestType CredentialOnly
-    Only validate credential retrieval from vault.
+    .\Test-RVToolsConnectivity.ps1 -HostName "vcenter.company.com"
 
 .EXAMPLE
-    .\Test-RVToolsConnectivity.ps1 -HostFilter "*contorso*"
-    Test only hosts matching the filter pattern.
+    .\Test-RVToolsConnectivity.ps1 -HostName "vcenter.company.com" -TestExport
 
-.NOTES
-    Author: Alfred Angelov
-    Date: 2025-08-30
-    Purpose: Validate RVTools connectivity and troubleshoot connection issues
+.EXAMPLE
+    $cred = Get-Credential
+    .\Test-RVToolsConnectivity.ps1 -HostName "vcenter.company.com" -Credential $cred -TestExport
 #>
 
 [CmdletBinding()]
 param(
-    [Parameter()]
-    [ValidateScript({Test-Path -LiteralPath $_ -PathType Leaf})]
-    [string]$ConfigPath = (Join-Path $PSScriptRoot '..' 'shared' 'Configuration.psd1'),
+    [Parameter(Mandatory)]
+    [string]$HostName,
     
     [Parameter()]
-    [ValidateScript({Test-Path -LiteralPath $_ -PathType Leaf})]
-    [string]$HostListPath = (Join-Path $PSScriptRoot '..' 'shared' 'HostList.psd1'),
+    [System.Management.Automation.PSCredential]$Credential,
     
     [Parameter()]
-    [ValidateSet('CredentialOnly', 'QuickConnect', 'FullValidation')]
-    [string]$TestType = 'QuickConnect',
+    [string]$RVToolsPath,
     
     [Parameter()]
-    [string]$HostFilter = '*'
+    [switch]$TestExport,
+    
+    [Parameter()]
+    [string]$LogFile
 )
 
 # Import required modules
-$ModulePath = Join-Path $PSScriptRoot '..' 'RVToolsModule' 'RVToolsModule.psd1'
-if (-not (Test-Path $ModulePath)) {
-    Write-Error "RVToolsModule not found at: $ModulePath"
-    exit 1
-}
+$scriptRoot = Split-Path $PSScriptRoot -Parent
+Import-Module (Join-Path $scriptRoot "RVToolsModule\RVToolsModule.psd1") -Force
 
-try {
-    Import-Module $ModulePath -Force -ErrorAction Stop
-    Write-Host "✓ RVToolsModule imported successfully" -ForegroundColor Green
-} catch {
-    Write-Error "Failed to import RVToolsModule: $($_.Exception.Message)"
-    exit 1
-}
-
-# Load configuration and host list
-try {
-    $result = Import-RVToolsConfiguration -ConfigPath $ConfigPath -HostListPath $HostListPath
-    $config = $result.Configuration
-    $hostList = $result.HostList
-    Write-Host "✓ Configuration loaded successfully" -ForegroundColor Green
-} catch {
-    Write-Error "Failed to load configuration: $($_.Exception.Message)"
-    exit 1
-}
-
-# Test vault availability
-try {
-    $vaultName = $config.Auth.DefaultVault
-    if ([string]::IsNullOrWhiteSpace($vaultName)) {
-        Write-Warning "✗ No vault name configured in Auth.DefaultVault"
+function Write-DiagnosticLog {
+    param(
+        [string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','SUCCESS','HEADER')]
+        [string]$Level = 'INFO'
+    )
+    
+    $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $color = switch ($Level) {
+        'SUCCESS' { 'Green' }
+        'ERROR' { 'Red' }
+        'WARN' { 'Yellow' }
+        'HEADER' { 'Cyan' }
+        default { 'White' }
+    }
+    
+    if ($Level -eq 'HEADER') {
+        Write-Host ""
+        Write-Host "=" * 60 -ForegroundColor $color
+        Write-Host "  $Message" -ForegroundColor $color  
+        Write-Host "=" * 60 -ForegroundColor $color
     } else {
-        $vaultTest = Test-RVToolsVault -VaultName $vaultName
-        if ($vaultTest) {
-            Write-Host "✓ SecretManagement vault '$vaultName' is available" -ForegroundColor Green
-        } else {
-            Write-Warning "✗ SecretManagement vault '$vaultName' is not available"
+        $logMessage = "[$timestamp] [$Level] $Message"
+        Write-Host $logMessage -ForegroundColor $color
+        
+        if ($LogFile) {
+            $logMessage | Out-File $LogFile -Append -Encoding UTF8
         }
     }
-} catch {
-    Write-Warning "✗ Failed to test vault: $($_.Exception.Message)"
 }
 
-# Filter hosts if specified
-$filteredHostConfigs = $hostList.Hosts | Where-Object { $_.Name -like $HostFilter }
-if (-not $filteredHostConfigs) {
-    Write-Error "No hosts match the filter: $HostFilter"
-    exit 1
-}
-
-Write-Host "`n🔍 Testing connectivity for $($filteredHostConfigs.Count) host(s) with test type: $TestType" -ForegroundColor Cyan
-Write-Host "=" * 80
-
-$results = @() # Initialize results array
-
-foreach ($hostConfig in $filteredHostConfigs) {
-    $hostName = $hostConfig.Name
-    $username = if ($hostConfig.Username) { $hostConfig.Username } else { $config.Auth.Username }
-    $exportMode = if ($hostConfig.ExportMode) { $hostConfig.ExportMode } else { 'Normal' }
+function Test-NetworkConnectivity {
+    param([string]$HostName)
     
-    Write-Host "`n📡 Testing: $hostName (User: $username, Mode: $exportMode)" -ForegroundColor Yellow
-    Write-Host "-" * 60
+    Write-DiagnosticLog -Level 'HEADER' -Message "Network Connectivity Tests"
     
-    $testResult = @{
-        HostName = $hostName
-        Username = $username
-        ExportMode = $exportMode
-        CredentialTest = $false
-        ConnectionTest = $false
-        ErrorMessage = $null
-        TestDetails = @{}
+    # DNS Resolution
+    try {
+        $dnsResult = Resolve-DnsName $HostName -ErrorAction Stop
+        Write-DiagnosticLog -Level 'SUCCESS' -Message "✅ DNS Resolution: $HostName resolves to $($dnsResult.IPAddress -join ', ')"
+    } catch {
+        Write-DiagnosticLog -Level 'ERROR' -Message "❌ DNS Resolution failed: $($_.Exception.Message)"
+        return $false
     }
+    
+    # ICMP Ping
+    try {
+        $pingResult = Test-Connection $HostName -Count 2 -Quiet
+        if ($pingResult) {
+            Write-DiagnosticLog -Level 'SUCCESS' -Message "✅ ICMP Ping: $HostName is reachable"
+        } else {
+            Write-DiagnosticLog -Level 'WARN' -Message "⚠️ ICMP Ping: $HostName is not responding (may be blocked by firewall)"
+        }
+    } catch {
+        Write-DiagnosticLog -Level 'WARN' -Message "⚠️ ICMP Ping failed: $($_.Exception.Message)"
+    }
+    
+    # HTTPS Port Test (443)
+    try {
+        $httpsTest = Test-NetConnection $HostName -Port 443 -WarningAction SilentlyContinue
+        if ($httpsTest.TcpTestSucceeded) {
+            Write-DiagnosticLog -Level 'SUCCESS' -Message "✅ HTTPS (443): Connection successful"
+            Write-DiagnosticLog -Level 'INFO' -Message "    Remote Address: $($httpsTest.RemoteAddress)"
+            Write-DiagnosticLog -Level 'INFO' -Message "    Latency: $($httpsTest.PingReplyDetails.RoundtripTime)ms"
+        } else {
+            Write-DiagnosticLog -Level 'ERROR' -Message "❌ HTTPS (443): Connection failed"
+            return $false
+        }
+    } catch {
+        Write-DiagnosticLog -Level 'ERROR' -Message "❌ HTTPS test failed: $($_.Exception.Message)"
+        return $false
+    }
+    
+    # SSL Certificate Test  
+    try {
+        $webRequest = [Net.WebRequest]::Create("https://$HostName")
+        $webRequest.Timeout = 10000
+        $webRequest.GetResponse() | Out-Null
+        Write-DiagnosticLog -Level 'SUCCESS' -Message "✅ SSL Certificate: Valid and trusted"
+    } catch {
+        Write-DiagnosticLog -Level 'WARN' -Message "⚠️ SSL Certificate: $($_.Exception.Message)"
+    }
+    
+    return $true
+}
+
+function Test-RVToolsInstallation {
+    param([string]$RVToolsPath)
+    
+    Write-DiagnosticLog -Level 'HEADER' -Message "RVTools Installation Check"
+    
+    # Auto-detect RVTools if not provided
+    if (-not $RVToolsPath) {
+        $possiblePaths = @(
+            "C:\Program Files (x86)\Dell\RVTools\RVTools.exe",
+            "C:\Program Files\Dell\RVTools\RVTools.exe",
+            "C:\RVTools\RVTools.exe"
+        )
+        
+        foreach ($path in $possiblePaths) {
+            if (Test-Path $path) {
+                $RVToolsPath = $path
+                break
+            }
+        }
+    }
+    
+    if (-not $RVToolsPath -or -not (Test-Path $RVToolsPath)) {
+        Write-DiagnosticLog -Level 'ERROR' -Message "❌ RVTools not found at expected locations"
+        return $null
+    }
+    
+    Write-DiagnosticLog -Level 'SUCCESS' -Message "✅ RVTools found: $RVToolsPath"
+    
+    # Get RVTools version
+    try {
+        $fileInfo = Get-Item $RVToolsPath
+        Write-DiagnosticLog -Level 'INFO' -Message "    Version: $($fileInfo.VersionInfo.FileVersion)"
+        Write-DiagnosticLog -Level 'INFO' -Message "    Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
+        Write-DiagnosticLog -Level 'INFO' -Message "    Modified: $($fileInfo.LastWriteTime)"
+    } catch {
+        Write-DiagnosticLog -Level 'WARN' -Message "⚠️ Could not read RVTools file info: $($_.Exception.Message)"
+    }
+    
+    # Check for log4net.config file (common issue)
+    $log4netConfig = Join-Path (Split-Path $RVToolsPath -Parent) "log4net.config"
+    if (Test-Path $log4netConfig) {
+        Write-DiagnosticLog -Level 'SUCCESS' -Message "✅ log4net.config found"
+    } else {
+        Write-DiagnosticLog -Level 'WARN' -Message "⚠️ log4net.config not found - may cause logging issues"
+    }
+    
+    return $RVToolsPath
+}
+
+function Test-SystemResources {
+    Write-DiagnosticLog -Level 'HEADER' -Message "System Resources Check"
+    
+    # Memory
+    try {
+        $memory = Get-WmiObject -Class Win32_ComputerSystem
+        $totalMemoryGB = [math]::Round($memory.TotalPhysicalMemory / 1GB, 2)
+        Write-DiagnosticLog -Level 'INFO' -Message "💾 Total Memory: ${totalMemoryGB}GB"
+        
+        if ($totalMemoryGB -lt 4) {
+            Write-DiagnosticLog -Level 'WARN' -Message "⚠️ Low memory - RVTools may perform slowly"
+        }
+    } catch {
+        Write-DiagnosticLog -Level 'WARN' -Message "⚠️ Could not check memory: $($_.Exception.Message)"
+    }
+    
+    # Disk space
+    try {
+        $scriptDrive = Split-Path $PSScriptRoot -Qualifier
+        $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='$scriptDrive'"
+        $freeSpaceGB = [math]::Round($disk.FreeSpace / 1GB, 2)
+        Write-DiagnosticLog -Level 'INFO' -Message "💽 Free Disk Space ($scriptDrive): ${freeSpaceGB}GB"
+        
+        if ($freeSpaceGB -lt 2) {
+            Write-DiagnosticLog -Level 'WARN' -Message "⚠️ Low disk space - exports may fail"
+        }
+    } catch {
+        Write-DiagnosticLog -Level 'WARN' -Message "⚠️ Could not check disk space: $($_.Exception.Message)"
+    }
+    
+    # PowerShell version
+    Write-DiagnosticLog -Level 'INFO' -Message "🔧 PowerShell Version: $($PSVersionTable.PSVersion)"
+    Write-DiagnosticLog -Level 'INFO' -Message "🔧 .NET Version: $($PSVersionTable.CLRVersion)"
+}
+
+function Test-Credentials {
+    param([string]$HostName, [PSCredential]$Credential)
+    
+    Write-DiagnosticLog -Level 'HEADER' -Message "Credential Testing"
+    
+    if (-not $Credential) {
+        Write-DiagnosticLog -Level 'WARN' -Message "⚠️ No credentials provided - will prompt during RVTools execution"
+        return
+    }
+    
+    Write-DiagnosticLog -Level 'INFO' -Message "🔐 Username: $($Credential.UserName)"
+    
+    # Basic vCenter SDK test (if available)
+    try {
+        if (Get-Module VMware.VimAutomation.Core -ListAvailable) {
+            Write-DiagnosticLog -Level 'INFO' -Message "🔌 Testing vCenter authentication with PowerCLI..."
+            Import-Module VMware.VimAutomation.Core -ErrorAction Stop
+            
+            $connection = Connect-VIServer $HostName -Credential $Credential -ErrorAction Stop
+            $vcInfo = Get-View ServiceInstance
+            Write-DiagnosticLog -Level 'SUCCESS' -Message "✅ PowerCLI authentication successful"
+            Write-DiagnosticLog -Level 'INFO' -Message "    vCenter Version: $($vcInfo.Content.About.Version)"
+            Write-DiagnosticLog -Level 'INFO' -Message "    Build: $($vcInfo.Content.About.Build)"
+            
+            Disconnect-VIServer -Server $connection -Confirm:$false
+        } else {
+            Write-DiagnosticLog -Level 'INFO' -Message "ℹ️ PowerCLI not available - skipping credential validation"
+        }
+    } catch {
+        Write-DiagnosticLog -Level 'ERROR' -Message "❌ vCenter authentication failed: $($_.Exception.Message)"
+    }
+}
+
+function Test-RVToolsExport {
+    param([string]$HostName, [PSCredential]$Credential, [string]$RVToolsPath)
+    
+    Write-DiagnosticLog -Level 'HEADER' -Message "RVTools Export Test"
+    
+    if (-not $Credential) {
+        Write-DiagnosticLog -Level 'WARN' -Message "⚠️ Skipping export test - no credentials provided"
+        return
+    }
+    
+    $testDir = Join-Path $env:TEMP "RVToolsConnectivityTest"
+    $testFile = "connectivity-test-$(Get-Date -Format 'yyyyMMdd-HHmmss').xlsx"
     
     try {
-        # Test 1: Credential Retrieval
-        Write-Host "  🔑 Testing credential retrieval..." -NoNewline
-        $credential = Get-RVToolsCredentialFromVault -HostName $hostName -Username $username -VaultName $vaultName
+        # Create test directory
+        if (-not (Test-Path $testDir)) {
+            New-Item -Path $testDir -ItemType Directory -Force | Out-Null
+        }
         
-        if ($credential -and $credential.Password) {
-            $testResult.CredentialTest = $true
-            $testResult.TestDetails.SecretName = Get-RVToolsSecretName -HostName $hostName -Username $username -Pattern $config.Auth.SecretNamePattern
-            Write-Host " ✓ SUCCESS" -ForegroundColor Green
-            Write-Host "    └─ Secret: $($testResult.TestDetails.SecretName)" -ForegroundColor Gray
+        Write-DiagnosticLog -Level 'INFO' -Message "🧪 Attempting test export to: $testDir\$testFile"
+        
+        # Use the module function for the test
+        $result = Invoke-RVToolsStandardExport `
+            -HostName $HostName `
+            -Credential $Credential `
+            -RVToolsPath $RVToolsPath `
+            -ExportDirectory $testDir `
+            -ExportFileName $testFile `
+            -LogFile $LogFile `
+            -ConfigLogLevel 'INFO'
+        
+        if ($result.Success) {
+            Write-DiagnosticLog -Level 'SUCCESS' -Message "✅ Test export successful!"
+            
+            $exportFile = Join-Path $testDir $testFile
+            if (Test-Path $exportFile) {
+                $fileInfo = Get-Item $exportFile
+                Write-DiagnosticLog -Level 'INFO' -Message "    File size: $([math]::Round($fileInfo.Length / 1KB, 2)) KB"
+                Write-DiagnosticLog -Level 'INFO' -Message "    Created: $($fileInfo.CreationTime)"
+            }
         } else {
-            Write-Host " ✗ FAILED (No credential retrieved)" -ForegroundColor Red
-            $testResult.ErrorMessage = "Failed to retrieve credential from vault"
-            $results += $testResult
-            continue
-        }
-        
-        # Stop here if only testing credentials
-        if ($TestType -eq 'CredentialOnly') {
-            $results += $testResult
-            continue
-        }
-        
-        # Test 2: Basic RVTools Connection
-        Write-Host "  🌐 Testing RVTools connection..." -NoNewline
-        
-        # Create a temporary test using RVTools with minimal operation
-        $rvToolsPath = Resolve-RVToolsPath -Path $config.RVToolsPath -ScriptRoot (Split-Path $ConfigPath -Parent)
-        
-        if (-not (Test-Path $rvToolsPath)) {
-            Write-Host " ✗ FAILED (RVTools not found)" -ForegroundColor Red
-            $testResult.ErrorMessage = "RVTools executable not found at: $rvToolsPath"
-            $results += $testResult
-            continue
-        }
-        
-        $testResult.TestDetails.RVToolsPath = $rvToolsPath
-        
-        # Test connection by attempting to login (without export)
-        $encryptedPassword = Get-RVToolsEncryptedPassword -Credential $credential
-        
-        if ($TestType -eq 'QuickConnect') {
-            # Quick test: attempt to connect and immediately disconnect
-            $tempStdOut = New-TemporaryFile
-            $tempStdErr = New-TemporaryFile
-            
-            $testArgs = @(
-                '-c', 'ExportAll2xlsx'  # Use proper command structure
-                '-s', $hostName
-                '-u', $username
-                '-p', $encryptedPassword  # Use encrypted password with -p flag
-            )
-            
-            try {
-                # Change to RVTools directory (as recommended by Dell)
-                $originalLocation = Get-Location
-                Set-Location (Split-Path $rvToolsPath -Parent)
-                
-                $process = Start-Process -FilePath $rvToolsPath -ArgumentList $testArgs -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $tempStdOut.FullName -RedirectStandardError $tempStdErr.FullName
-                
-                # Read output for debugging
-                $stdOut = if (Test-Path $tempStdOut.FullName) { Get-Content $tempStdOut.FullName -Raw } else { "" }
-                $stdErr = if (Test-Path $tempStdErr.FullName) { Get-Content $tempStdErr.FullName -Raw } else { "" }
-                
-                $testResult.TestDetails.RVToolsStdOut = $stdOut
-                $testResult.TestDetails.RVToolsStdErr = $stdErr
-                $testResult.TestDetails.ExitCode = $process.ExitCode
-                
-                # Restore original location
-                Set-Location $originalLocation
-                
-                if ($process.ExitCode -eq 0) {
-                    $testResult.ConnectionTest = $true
-                    Write-Host " ✓ SUCCESS" -ForegroundColor Green
-                    Write-Host "    └─ RVTools connected successfully" -ForegroundColor Gray
-                } else {
-                    Write-Host " ✗ FAILED (Exit code: $($process.ExitCode))" -ForegroundColor Red
-                    $testResult.ErrorMessage = "RVTools connection failed with exit code: $($process.ExitCode)"
-                    if ($stdErr) {
-                        $testResult.ErrorMessage += " - Error: $($stdErr.Trim())"
-                        Write-Host "    └─ RVTools Error: $($stdErr.Trim())" -ForegroundColor Red
-                    }
-                }
-                
-                # Clean up temp files
-                Remove-Item $tempStdOut.FullName, $tempStdErr.FullName -Force -ErrorAction SilentlyContinue
-                
-            } catch {
-                Set-Location $originalLocation -ErrorAction SilentlyContinue
-                Write-Host " ✗ FAILED (Exception)" -ForegroundColor Red
-                $testResult.ErrorMessage = "RVTools connection exception: $($_.Exception.Message)"
-                Remove-Item $tempStdOut.FullName, $tempStdErr.FullName -Force -ErrorAction SilentlyContinue
-            }
-        } elseif ($TestType -eq 'FullValidation') {
-            # Full test: attempt vLicense single-tab export
-            Write-Host "    └─ Using vLicense single-tab export for validation" -ForegroundColor Gray
-            
-            try {
-                # Direct RVTools call for vLicense export
-                $tempDir = [System.IO.Path]::GetTempPath()
-                $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-                $testFileName = "connectivity-test-$($hostName.Replace('.', '_'))-$timestamp-vLicense.xlsx"
-                $testFilePath = Join-Path $tempDir $testFileName
-                
-                $encryptedPassword = Get-RVToolsEncryptedPassword -Credential $credential
-                
-                # Use vLicense export command
-                $testArgs = @(
-                    '-c', 'ExportvLicense2xlsx'
-                    '-s', $hostName
-                    '-u', $username
-                    '-p', $encryptedPassword
-                    '-d', $tempDir
-                    '-f', $testFileName
-                )
-                
-                $tempStdOut = New-TemporaryFile
-                $tempStdErr = New-TemporaryFile
-                
-                # Change to RVTools directory
-                $originalLocation = Get-Location
-                Set-Location (Split-Path $rvToolsPath -Parent)
-                
-                $process = Start-Process -FilePath $rvToolsPath -ArgumentList $testArgs -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $tempStdOut.FullName -RedirectStandardError $tempStdErr.FullName
-                
-                # Read output for debugging
-                $stdOut = if (Test-Path $tempStdOut.FullName) { Get-Content $tempStdOut.FullName -Raw } else { "" }
-                $stdErr = if (Test-Path $tempStdErr.FullName) { Get-Content $tempStdErr.FullName -Raw } else { "" }
-                
-                # Restore location
-                Set-Location $originalLocation
-                
-                $testResult.TestDetails.ExitCode = $process.ExitCode
-                $testResult.TestDetails.RVToolsStdOut = $stdOut
-                $testResult.TestDetails.RVToolsStdErr = $stdErr
-                
-                if ($process.ExitCode -eq 0 -and (Test-Path $testFilePath)) {
-                    $testResult.ConnectionTest = $true
-                    $testResult.TestDetails.ExportFile = $testFilePath
-                    Write-Host " ✓ SUCCESS" -ForegroundColor Green
-                    Write-Host "    └─ vLicense export completed: $testFileName" -ForegroundColor Gray
-                    
-                    # Clean up test file
-                    Remove-Item $testFilePath -Force -ErrorAction SilentlyContinue
-                } else {
-                    Write-Host " ✗ FAILED (Exit code: $($process.ExitCode))" -ForegroundColor Red
-                    $testResult.ErrorMessage = "vLicense export failed with exit code: $($process.ExitCode)"
-                    if ($stdErr) {
-                        $testResult.ErrorMessage += " - Error: $($stdErr.Trim())"
-                        Write-Host "    └─ RVTools Error: $($stdErr.Trim())" -ForegroundColor Red
-                    }
-                }
-                
-                # Clean up temp files
-                Remove-Item $tempStdOut.FullName, $tempStdErr.FullName -Force -ErrorAction SilentlyContinue
-                
-            } catch {
-                Set-Location $originalLocation -ErrorAction SilentlyContinue
-                Write-Host " ✗ FAILED (Exception)" -ForegroundColor Red
-                $testResult.ErrorMessage = "vLicense export test exception: $($_.Exception.Message)"
-                Remove-Item $tempStdOut.FullName, $tempStdErr.FullName -Force -ErrorAction SilentlyContinue
-            }
+            Write-DiagnosticLog -Level 'ERROR' -Message "❌ Test export failed: $($result.Message)"
         }
         
     } catch {
-        Write-Host " ✗ FAILED (Exception)" -ForegroundColor Red
-        $testResult.ErrorMessage = "Test exception: $($_.Exception.Message)"
-    }
-    
-    $results += $testResult
-}
-
-# Summary Report
-Write-Host "`n📊 CONNECTIVITY TEST SUMMARY" -ForegroundColor Cyan
-Write-Host "=" * 80
-
-$successCount = ($results | Where-Object { $_.CredentialTest -and ($TestType -eq 'CredentialOnly' -or $_.ConnectionTest) }).Count
-$totalCount = $results.Count
-
-Write-Host "Overall Status: " -NoNewline
-if ($successCount -eq $totalCount) {
-    Write-Host "✓ ALL TESTS PASSED ($successCount/$totalCount)" -ForegroundColor Green
-} elseif ($successCount -gt 0) {
-    Write-Host "⚠ PARTIAL SUCCESS ($successCount/$totalCount)" -ForegroundColor Yellow
-} else {
-    Write-Host "✗ ALL TESTS FAILED ($successCount/$totalCount)" -ForegroundColor Red
-}
-
-Write-Host "`nDetailed Results:" -ForegroundColor Cyan
-
-foreach ($result in $results) {
-    $status = if ($result.CredentialTest -and ($TestType -eq 'CredentialOnly' -or $result.ConnectionTest)) { "✓ PASS" } else { "✗ FAIL" }
-    $color = if ($status -eq "✓ PASS") { "Green" } else { "Red" }
-    
-    Write-Host "  $($result.HostName) ($($result.Username)): " -NoNewline
-    Write-Host $status -ForegroundColor $color
-    
-    if ($result.CredentialTest) {
-        Write-Host "    └─ Credential: ✓ Retrieved from vault" -ForegroundColor Gray
-    } else {
-        Write-Host "    └─ Credential: ✗ Failed to retrieve" -ForegroundColor Gray
-    }
-    
-    if ($TestType -ne 'CredentialOnly') {
-        if ($result.ConnectionTest) {
-            Write-Host "    └─ Connection: ✓ RVTools connected successfully" -ForegroundColor Gray
-        } else {
-            Write-Host "    └─ Connection: ✗ Failed to connect" -ForegroundColor Gray
+        Write-DiagnosticLog -Level 'ERROR' -Message "❌ Test export exception: $($_.Exception.Message)"
+    } finally {
+        # Clean up test files
+        if (Test-Path $testDir) {
+            try {
+                Remove-Item $testDir -Recurse -Force
+                Write-DiagnosticLog -Level 'INFO' -Message "🧹 Cleaned up test files"
+            } catch {
+                Write-DiagnosticLog -Level 'WARN' -Message "⚠️ Could not clean up test directory: $testDir"
+            }
         }
     }
-    
-    if ($result.ErrorMessage) {
-        Write-Host "    └─ Error: $($result.ErrorMessage)" -ForegroundColor Red
-    }
 }
 
-# Recommendations
-Write-Host "`n💡 RECOMMENDATIONS" -ForegroundColor Cyan
-Write-Host "=" * 80
+# Main diagnostic execution
+Write-DiagnosticLog -Level 'HEADER' -Message "RVTools Connectivity Diagnostics"
+Write-DiagnosticLog -Level 'INFO' -Message "Target: $HostName"
+Write-DiagnosticLog -Level 'INFO' -Message "Started: $(Get-Date)"
 
-$failedCredentials = $results | Where-Object { -not $_.CredentialTest }
-$failedConnections = $results | Where-Object { $_.CredentialTest -and -not $_.ConnectionTest -and $TestType -ne 'CredentialOnly' }
+# Run all diagnostic tests
+$networkOk = Test-NetworkConnectivity -HostName $HostName
+$detectedRVToolsPath = Test-RVToolsInstallation -RVToolsPath $RVToolsPath
+Test-SystemResources
 
-if ($failedCredentials) {
-    Write-Host "🔑 Credential Issues:" -ForegroundColor Yellow
-    foreach ($failed in $failedCredentials) {
-        Write-Host "  • $($failed.HostName): Use Set-RVToolsCredentials.ps1 to store credentials" -ForegroundColor Gray
-    }
+if ($Credential) {
+    Test-Credentials -HostName $HostName -Credential $Credential
 }
 
-if ($failedConnections) {
-    Write-Host "🌐 Connection Issues:" -ForegroundColor Yellow
-    foreach ($failed in $failedConnections) {
-        Write-Host "  • $($failed.HostName): Check network connectivity, vCenter status, and firewall rules" -ForegroundColor Gray
-    }
+if ($TestExport -and $networkOk -and $detectedRVToolsPath) {
+    Test-RVToolsExport -HostName $HostName -Credential $Credential -RVToolsPath $detectedRVToolsPath
 }
 
-if ($successCount -eq $totalCount) {
-    Write-Host "🎉 All connectivity tests passed! Your RVTools setup is ready for production use." -ForegroundColor Green
-}
+Write-DiagnosticLog -Level 'HEADER' -Message "Diagnostics Complete"
+Write-DiagnosticLog -Level 'INFO' -Message "Completed: $(Get-Date)"
 
-# Exit with appropriate code
-exit ($totalCount - $successCount)
+if ($LogFile) {
+    Write-DiagnosticLog -Level 'INFO' -Message "Full log saved to: $LogFile"
+}

@@ -26,17 +26,14 @@
     large vCenter environments cause RVTools to crash during full export. 
     Each tab is exported individually, reducing memory usage.
 
+.PARAMETER TestMode
+    When used with ChunkedExport, exports only 3 tabs (vInfo, vHost, vDatastore) for quick testing.
+    Useful during development and testing of export/merge functionality.
+
 .NOTES
-    Version: 3.2.0
-    - Completely refactored to use RVToolsModule public functions
-    - Removed ~200+ lines of duplicated code
-    - Improved maintainability and error handling
-    - Better separation of concerns
-    - Keep live config files out of source control. Templates are provided under `shared/`.
-    - Credentials are requested securely at runtime. Password is passed to RVTools as plain text
-      command-line argument (required by RVTools). Use a low-privilege service account.
-    - PowerShell 7+ compatible.
-    - ImportExcel module integration - no Microsoft Excel installation required.
+    Refactored to leverage RVToolsModule functions for better code reuse and consistency.
+    Added TestMode parameter for rapid development testing with limited tabs.
+    Enhanced chunked export testing and validation framework.
 #>
 
 [CmdletBinding(SupportsShouldProcess = $true)]
@@ -45,7 +42,8 @@ param(
     [Parameter()] [string] $HostListPath = (Join-Path $PSScriptRoot 'shared/HostList.psd1'),
     [Parameter()] [switch] $NoEmail,
     [Parameter()] [switch] $DryRun,
-    [Parameter()] [switch] $ChunkedExport
+    [Parameter()] [switch] $ChunkedExport,
+    [Parameter()] [switch] $TestMode
 )
 
 Set-StrictMode -Version Latest
@@ -55,20 +53,22 @@ $ErrorActionPreference = 'Stop'
 try {
     Import-Module (Join-Path $PSScriptRoot 'RVToolsModule') -Force -ErrorAction Stop
     Write-Verbose "RVToolsModule loaded successfully"
-} catch {
+}
+catch {
     Write-Error "Failed to load RVToolsModule: $($_.Exception.Message)"
     exit 1
 }
 
 # Use the module's main export function with parameter mapping
 $moduleParams = @{
-    ConfigPath = $ConfigPath
+    ConfigPath   = $ConfigPath
     HostListPath = $HostListPath
-    DryRun = $DryRun
+    DryRun       = $DryRun
 }
 
 # Add optional parameters if they were specified
 if ($ChunkedExport) { $moduleParams.ChunkedExport = $true }
+if ($TestMode) { $moduleParams.TestMode = $true }
 if ($NoEmail) { $moduleParams.NoEmail = $true }
 
 # Execute the main export function
@@ -82,21 +82,25 @@ try {
                 # Chunked export result
                 if ($_.FailedTabs -eq 0) {
                     "SUCCESS (CHUNKED) - $($_.HostName)"
-                } else {
+                }
+                else {
                     "PARTIAL SUCCESS (CHUNKED $($_.SuccessfulTabs)/$($_.SuccessfulTabs + $_.FailedTabs)) - $($_.HostName)"
                 }
-            } else {
+            }
+            else {
                 # Standard export result
                 "$($_.Message) - $($_.HostName)"
             }
-        } else {
+        }
+        else {
             "$($_.Message) - $($_.HostName)"
         }
     }
     
     Write-Host ("Run complete. Summary: {0}" -f ($overallStatus -join '; '))
     
-} catch {
+}
+catch {
     Write-Error "Export failed: $($_.Exception.Message)"
     exit 1
 }

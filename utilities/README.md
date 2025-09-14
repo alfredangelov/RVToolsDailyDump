@@ -6,9 +6,12 @@ This folder contains utility scripts for maintaining and troubleshooting the RVT
 
 **Purpose:** Fixes the log4net configuration issue in RVTools where the main config file declares a log4net section but doesn't include the actual configuration.
 
-**When to use:**
+**Automatic Application:** This fix is **automatically applied** when RVTools is installed via `Initialize-RVToolsDependencies.ps1`. Manual execution is only needed for existing RVTools installations or troubleshooting.
 
-- After installing or updating RVTools
+**When to use manually:**
+
+- For existing RVTools installations (before initial toolkit setup)
+- After manually updating RVTools (outside of the toolkit)
 - When encountering log4net errors like: "Failed to find configuration section 'log4net' in the application's .config file"
 - When RVTools command-line operations fail with configuration-related errors
 

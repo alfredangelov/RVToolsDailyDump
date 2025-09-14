@@ -6,9 +6,6 @@
     This script tests the SecretManagement vault operations, credential storage/retrieval,
     and credential validation functionality of the RVTools toolkit.
 
-.VERSION
-    1.4.2
-
 .PARAMETER TestVault
     Name of the test vault to create (default: RVToolsTest)
 
@@ -34,7 +31,7 @@ $ErrorActionPreference = 'Stop'
 function Write-Log {
     param(
         [Parameter(Mandatory)] [string] $Message,
-        [ValidateSet('INFO','WARN','ERROR','SUCCESS','FAIL')] [string] $Level = 'INFO'
+        [ValidateSet('INFO', 'WARN', 'ERROR', 'SUCCESS', 'FAIL')] [string] $Level = 'INFO'
     )
     $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
     $color = switch ($Level) {
@@ -56,11 +53,13 @@ function Test-SecretManagementModule {
             Write-Log -Level 'SUCCESS' -Message "SecretManagement module found: $($module.Version)"
             Import-Module Microsoft.PowerShell.SecretManagement -Force
             return $true
-        } else {
+        }
+        else {
             Write-Log -Level 'FAIL' -Message "SecretManagement module not found"
             return $false
         }
-    } catch {
+    }
+    catch {
         Write-Log -Level 'ERROR' -Message "Failed to load SecretManagement: $($_.Exception.Message)"
         return $false
     }
@@ -88,11 +87,13 @@ function Test-VaultOperations {
         if ($vault) {
             Write-Log -Level 'SUCCESS' -Message "Vault verification successful"
             return $true
-        } else {
+        }
+        else {
             Write-Log -Level 'FAIL' -Message "Vault verification failed"
             return $false
         }
-    } catch {
+    }
+    catch {
         Write-Log -Level 'ERROR' -Message "Vault operations failed: $($_.Exception.Message)"
         return $false
     }
@@ -128,11 +129,13 @@ function Test-CredentialStorage {
                 $retrievedPassword = $retrievedCred.GetNetworkCredential().Password
                 if ($retrievedPassword -eq $cred.Password) {
                     Write-Log -Level 'SUCCESS' -Message "Password verification successful for: $($cred.Name)"
-                } else {
+                }
+                else {
                     Write-Log -Level 'FAIL' -Message "Password mismatch for: $($cred.Name)"
                     return $false
                 }
-            } else {
+            }
+            else {
                 Write-Log -Level 'FAIL' -Message "Failed to retrieve credential for: $($cred.Name)"
                 return $false
             }
@@ -143,7 +146,8 @@ function Test-CredentialStorage {
         Write-Log -Level 'SUCCESS' -Message "Found $($secrets.Count) secrets in test vault"
         
         return $true
-    } catch {
+    }
+    catch {
         Write-Log -Level 'ERROR' -Message "Credential storage test failed: $($_.Exception.Message)"
         return $false
     }
@@ -167,11 +171,13 @@ function Test-CredentialCleanup {
         if ($remainingSecrets.Count -eq 0) {
             Write-Log -Level 'SUCCESS' -Message "All test secrets cleaned up successfully"
             return $true
-        } else {
+        }
+        else {
             Write-Log -Level 'WARN' -Message "$($remainingSecrets.Count) secrets remain in vault"
             return $false
         }
-    } catch {
+    }
+    catch {
         Write-Log -Level 'ERROR' -Message "Credential cleanup failed: $($_.Exception.Message)"
         return $false
     }
@@ -186,7 +192,8 @@ function Remove-TestVault {
         Unregister-SecretVault -Name $VaultName
         Write-Log -Level 'SUCCESS' -Message "Test vault removed successfully"
         return $true
-    } catch {
+    }
+    catch {
         Write-Log -Level 'ERROR' -Message "Failed to remove test vault: $($_.Exception.Message)"
         return $false
     }
@@ -215,11 +222,13 @@ if ($testResults[-1]) {
         # Remove test vault if requested
         if ($CleanupAfter) {
             $testResults += Remove-TestVault -VaultName $TestVault
-        } else {
+        }
+        else {
             Write-Log -Level 'INFO' -Message "Test vault preserved for manual inspection: $TestVault"
         }
     }
-} else {
+}
+else {
     Write-Log -Level 'ERROR' -Message "Cannot proceed without SecretManagement module"
 }
 
@@ -234,7 +243,8 @@ $totalTests = $testResults.Count
 if ($passedTests -eq $totalTests) {
     Write-Log -Level 'SUCCESS' -Message "All tests passed! ($passedTests/$totalTests)"
     exit 0
-} else {
+}
+else {
     Write-Log -Level 'FAIL' -Message "Some tests failed! ($passedTests/$totalTests)"
     exit 1
 }
